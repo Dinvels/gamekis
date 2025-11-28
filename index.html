@@ -133,6 +133,7 @@
         <div id="ui">
             <div>🐱 Счет: <span id="score">0</span></div>
             <div>🎯 Уровень: <span id="level">1</span></div>
+            <div>⚡ Мячи: <span id="balls">1</span></div>
         </div>
         
         <div id="touchControls">
@@ -143,7 +144,7 @@
         <div id="levelUp">УРОВЕНЬ <span id="levelNumber">2</span>!</div>
         
         <div id="pauseScreen">
-            <h2>ПАУЗА</h2>
+            <h2>Устала, кис? 😴</h2>
             <p>Игра приостановлена</p>
             <button class="game-btn" onclick="resumeGame()">▶️ Продолжить</button>
             <button class="game-btn" onclick="restartGame()">🔄 Начать заново</button>
@@ -162,8 +163,8 @@
         // Конфигурация игры
         const config = {
             LEVEL_SETTINGS: {
-                1: { speed: 7.0, bouncesNeeded: 24 }, // Увеличена начальная скорость до 7
-                2: { speed: 9.0, bouncesNeeded: 24 },
+                1: { speed: 9.0, bouncesNeeded: 24 }, // На мобильных как 2 уровень
+                2: { speed: 9.0, bouncesNeeded: 24 }, // Сохраняем для ПК
                 3: { speed: 11.0, bouncesNeeded: 24 },
                 4: { speed: 13.0, bouncesNeeded: 24 },
                 5: { speed: 15.0, bouncesNeeded: 24 },
@@ -173,14 +174,15 @@
                 9: { speed: 23.0, bouncesNeeded: 24 },
                 10: { speed: 25.0, bouncesNeeded: 9999 }
             },
-            POWERUP_CHANCE: 0.15,
-            POWERUP_TYPES: ["expand", "shrink", "slow", "fast", "multi"],
-            POWERUP_DURATION: 6000
+            POWERUP_CHANCE: 0.3, // Увеличена в 2 раза (было 0.15)
+            POWERUP_TYPES: ["expand", "shrink", "slow", "fast", "multi", "bomb"],
+            POWERUP_DURATION: 6000,
+            BOMB_CHANCE: 0.1 // Шанс появления бомбы
         };
 
         // Игровые переменные
         let canvas, ctx;
-        let platform, balls, powerups, activePowerups;
+        let platform, balls, powerups, activePowerups, bombs;
         let score = 0;
         let currentLevel = 1;
         let bouncesInCurrentLevel = 0;
@@ -195,7 +197,7 @@
         let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         
         // Множитель скорости для мобильных устройств
-        const MOBILE_SPEED_MULTIPLIER = 1.3; // На 30% быстрее на мобильных
+        const MOBILE_SPEED_MULTIPLIER = 1.0; // Теперь начальная скорость как на 2 уровне
         
         // Цвета для платформы и мячей
         const platformColors = ['#FFB6C1', '#ADD8E6', '#98FB98', '#DDA0DD', '#F0E68C', '#FFA07A', '#87CEEB', '#FFD700'];
@@ -211,16 +213,18 @@
         
         const sounds = {
             hit: null,
-            music: null
+            music: null,
+            bomb: null
         };
 
-        // Цвета для бонусов
+        // Цвета для бонусов и бомб
         const POWERUP_COLORS = {
             expand: '#32CD32',
             shrink: '#DC143C', 
             slow: '#1E90FF',
             fast: '#FFD700',
-            multi: '#9400D3'
+            multi: '#9400D3',
+            bomb: '#000000'
         };
 
         // Символы для бонусов
@@ -229,12 +233,17 @@
             shrink: '-',
             slow: '↓',
             fast: '↑',
-            multi: 'x'
+            multi: 'x',
+            bomb: '💣'
         };
 
         // Функция для получения скорости с учетом типа устройства
         function getBallSpeed(level) {
             let baseSpeed = config.LEVEL_SETTINGS[level].speed * (WIDTH / 800);
+            if (isMobile && level === 1) {
+                // На мобильных 1 уровень имеет скорость как 2 уровень
+                return config.LEVEL_SETTINGS[2].speed * (WIDTH / 800) * MOBILE_SPEED_MULTIPLIER;
+            }
             if (isMobile) {
                 return baseSpeed * MOBILE_SPEED_MULTIPLIER;
             }
@@ -261,8 +270,10 @@
             // Запуск игрового цикла
             requestAnimationFrame(gameLoop);
             
-            // Запуск музыки
-            playBackgroundMusic();
+            // Запуск музыки (только если не компьютер)
+            if (!isMobile) {
+                playBackgroundMusic();
+            }
         }
 
         function setupCanvasSize() {
@@ -291,10 +302,12 @@
                 // Загрузка звуков
                 sounds.hit = new Audio('DP2_Gang_Rim_Hit.wav');
                 sounds.music = new Audio('U.mp3');
+                sounds.bomb = new Audio('DP2_Gang_Rim_Hit.wav'); // Можно заменить на звук взрыва
                 
                 sounds.hit.volume = 0.7;
                 sounds.music.volume = 0.5;
                 sounds.music.loop = true;
+                sounds.bomb.volume = 0.8;
                 
             } catch (error) {
                 console.log("Некоторые ресурсы не загружены, игра продолжается без них");
@@ -347,18 +360,15 @@
                 if (gameOver || isPaused) return;
                 
                 if (e.key === 'ArrowLeft') {
-                    // На компьютере скорость в 3 раза выше (было 2)
                     platform.x = Math.max(0, platform.x - platform.speed * 3);
                 } else if (e.key === 'ArrowRight') {
-                    // На компьютере скорость в 3 раза выше (было 2)
                     platform.x = Math.min(WIDTH - platform.width, platform.x + platform.speed * 3);
                 } else if (e.key === ' ' || e.key === 'Escape') {
-                    // Пробел или Escape для паузы
                     togglePause();
                 }
             });
             
-            // Сенсорное управление (для мобильных) - НОРМАЛЬНАЯ СКОРОСТЬ
+            // Сенсорное управление (для мобильных)
             let touchStartX = 0;
             let isMoving = false;
             
@@ -375,7 +385,6 @@
                 const touchX = e.touches[0].clientX;
                 const gameX = touchX * (WIDTH / window.innerWidth);
                 
-                // На мобильных нормальная скорость (без умножения)
                 platform.x = Math.max(0, Math.min(WIDTH - platform.width, gameX - platform.width / 2));
                 
                 e.preventDefault();
@@ -392,7 +401,6 @@
                 const currentTime = new Date().getTime();
                 const timeDiff = currentTime - lastTouchTime;
                 if (timeDiff < 300 && timeDiff > 0) {
-                    // Двойное касание - пауза
                     togglePause();
                 }
                 lastTouchTime = currentTime;
@@ -406,12 +414,12 @@
             isPaused = !isPaused;
             if (isPaused) {
                 document.getElementById('pauseScreen').style.display = 'flex';
-                if (sounds.music) {
+                if (sounds.music && !isMobile) {
                     sounds.music.pause();
                 }
             } else {
                 document.getElementById('pauseScreen').style.display = 'none';
-                if (sounds.music) {
+                if (sounds.music && !isMobile) {
                     sounds.music.play().catch(e => console.log("Не удалось возобновить музыку"));
                 }
                 requestAnimationFrame(gameLoop);
@@ -421,7 +429,7 @@
         function resumeGame() {
             isPaused = false;
             document.getElementById('pauseScreen').style.display = 'none';
-            if (sounds.music) {
+            if (sounds.music && !isMobile) {
                 sounds.music.play().catch(e => console.log("Не удалось возобновить музыку"));
             }
             requestAnimationFrame(gameLoop);
@@ -431,8 +439,7 @@
             const platformWidth = Math.min(150, WIDTH * 0.2);
             const platformHeight = Math.max(15, HEIGHT * 0.02);
             
-            // Базовая скорость платформы (увеличена для ПК)
-            const baseSpeed = WIDTH * 0.02; // Увеличена базовая скорость
+            const baseSpeed = WIDTH * 0.02;
             
             platform = {
                 width: platformWidth,
@@ -457,6 +464,7 @@
             }];
 
             powerups = [];
+            bombs = [];
             activePowerups = {};
             score = 0;
             currentLevel = 1;
@@ -480,32 +488,27 @@
         }
 
         function update(deltaTime) {
-            // Обновление активных бонусов
             updatePowerups();
+            updateBombs();
             
-            // Обновление мячей
             balls.forEach((ball, index) => {
                 updateBall(ball, index);
             });
 
-            // Обновление бонусов
             updatePowerupsMovement();
+            updateBombsMovement();
 
-            // Удаление потерянных мячей
             balls = balls.filter(ball => ball.y - ball.radius <= HEIGHT);
 
-            // Проверка окончания игры
             if (balls.length === 0) {
                 endGame();
             }
         }
 
         function updateBall(ball, ballIndex) {
-            // Движение мяча
             ball.x += ball.dx;
             ball.y += ball.dy;
 
-            // Отскок от стен
             if (ball.x - ball.radius <= 0 || ball.x + ball.radius >= WIDTH) {
                 ball.dx = -ball.dx;
                 ball.x = Math.max(ball.radius, Math.min(WIDTH - ball.radius, ball.x));
@@ -516,7 +519,6 @@
                 ball.y = ball.radius;
             }
 
-            // Проверка столкновения с платформой
             if (ball.y + ball.radius >= platform.y && 
                 ball.y - ball.radius <= platform.y + platform.height &&
                 ball.x >= platform.x && 
@@ -527,7 +529,6 @@
         }
 
         function handlePlatformCollision(ball) {
-            // Отскок от платформы
             const relativeIntersectX = (platform.x + platform.width / 2) - ball.x;
             const normalizedX = relativeIntersectX / (platform.width / 2);
             const bounceAngle = normalizedX * (Math.PI / 3);
@@ -537,18 +538,15 @@
             ball.dx = -currentSpeed * Math.sin(bounceAngle);
             ball.dy = -Math.abs(currentSpeed * Math.cos(bounceAngle));
 
-            // Обновление счета и уровня
             score++;
             bouncesInCurrentLevel++;
 
-            // Проверка перехода на следующий уровень
             if (bouncesInCurrentLevel >= config.LEVEL_SETTINGS[currentLevel].bouncesNeeded) {
                 if (currentLevel < Object.keys(config.LEVEL_SETTINGS).length) {
                     showLevelUp(currentLevel + 1);
                     currentLevel++;
                     bouncesInCurrentLevel = 0;
                     
-                    // Обновление скорости всех мячей
                     balls.forEach(b => {
                         const speed = Math.sqrt(b.dx * b.dx + b.dy * b.dy);
                         const newSpeed = getBallSpeed(currentLevel);
@@ -558,7 +556,6 @@
                 }
             }
 
-            // Увеличение платформы
             const maxPlatformWidth = WIDTH * 0.4;
             platform.width = Math.min(maxPlatformWidth, Math.min(150, WIDTH * 0.2) * (1 + 0.001 * score));
             
@@ -566,26 +563,21 @@
                 platform.x = WIDTH - platform.width;
             }
 
-            // Смена цветов при столкновении
             changeColors();
 
-            // Создание бонусов
+            // Создание бонусов и бомб
             if (Math.random() < config.POWERUP_CHANCE && powerups.length < 3) {
                 createPowerup();
             }
 
-            // Воспроизведение звука удара
             playHitSound();
-
             updateUI();
         }
 
         function changeColors() {
-            // Смена цвета платформы
             currentPlatformColorIndex = (currentPlatformColorIndex + 1) % platformColors.length;
             platform.color = platformColors[currentPlatformColorIndex];
             
-            // Смена цвета всех мячей
             currentBallColorIndex = (currentBallColorIndex + 1) % ballColors.length;
             balls.forEach(ball => {
                 ball.color = ballColors[currentBallColorIndex];
@@ -606,24 +598,40 @@
 
         function createPowerup() {
             const powerupSize = Math.max(15, WIDTH * 0.03);
-            const type = config.POWERUP_TYPES[Math.floor(Math.random() * config.POWERUP_TYPES.length)];
+            let type;
             
-            powerups.push({
-                x: Math.random() * (WIDTH - powerupSize * 2) + powerupSize,
-                y: 0,
-                type: type,
-                speed: 2 * (HEIGHT / 600),
-                size: powerupSize,
-                color: POWERUP_COLORS[type] || '#FFFFFF'
-            });
+            // Шанс создания бомбы
+            if (Math.random() < config.BOMB_CHANCE) {
+                type = "bomb";
+            } else {
+                type = config.POWERUP_TYPES[Math.floor(Math.random() * (config.POWERUP_TYPES.length - 1))];
+            }
+            
+            if (type === "bomb") {
+                bombs.push({
+                    x: Math.random() * (WIDTH - powerupSize * 2) + powerupSize,
+                    y: 0,
+                    type: type,
+                    speed: 3 * (HEIGHT / 600), // Бомбы падают быстрее
+                    size: powerupSize,
+                    color: POWERUP_COLORS[type] || '#000000'
+                });
+            } else {
+                powerups.push({
+                    x: Math.random() * (WIDTH - powerupSize * 2) + powerupSize,
+                    y: 0,
+                    type: type,
+                    speed: 2 * (HEIGHT / 600),
+                    size: powerupSize,
+                    color: POWERUP_COLORS[type] || '#FFFFFF'
+                });
+            }
         }
 
         function updatePowerupsMovement() {
-            // Движение бонусов
             powerups.forEach((powerup, index) => {
                 powerup.y += powerup.speed;
 
-                // Проверка столкновения с платформой
                 if (powerup.y + powerup.size >= platform.y && 
                     powerup.y <= platform.y + platform.height &&
                     powerup.x >= platform.x && 
@@ -633,15 +641,37 @@
                     powerups.splice(index, 1);
                 }
 
-                // Удаление вышедших за экран
                 if (powerup.y > HEIGHT) {
                     powerups.splice(index, 1);
                 }
             });
         }
 
+        function updateBombsMovement() {
+            bombs.forEach((bomb, index) => {
+                bomb.y += bomb.speed;
+
+                if (bomb.y + bomb.size >= platform.y && 
+                    bomb.y <= platform.y + platform.height &&
+                    bomb.x >= platform.x && 
+                    bomb.x <= platform.x + platform.width) {
+                    
+                    // Столкновение с бомбой - проигрыш
+                    playBombSound();
+                    endGame();
+                }
+
+                if (bomb.y > HEIGHT) {
+                    bombs.splice(index, 1);
+                }
+            });
+        }
+
+        function updateBombs() {
+            // Можно добавить анимацию мигания для бомб
+        }
+
         function updatePowerups() {
-            // Обновление активных бонусов
             const now = Date.now();
             Object.keys(activePowerups).forEach(type => {
                 if (now > activePowerups[type]) {
@@ -678,10 +708,13 @@
                     break;
                 case 'multi':
                     if (balls.length < 5) {
-                        const newBall = {...balls[0]};
-                        newBall.dx = -newBall.dx;
-                        newBall.color = ballColors[(currentBallColorIndex + 1) % ballColors.length];
-                        balls.push(newBall);
+                        // Создаем 2 дополнительных мяча вместо 1
+                        for (let i = 0; i < 2 && balls.length < 5; i++) {
+                            const newBall = {...balls[0]};
+                            newBall.dx = -newBall.dx * (0.8 + Math.random() * 0.4);
+                            newBall.color = ballColors[(currentBallColorIndex + 1) % ballColors.length];
+                            balls.push(newBall);
+                        }
                     }
                     break;
             }
@@ -699,7 +732,6 @@
                     break;
                 case 'slow':
                 case 'fast':
-                    // Скорость вернется к нормальной при следующем отскоке
                     break;
             }
         }
@@ -711,27 +743,27 @@
             }
         }
 
+        function playBombSound() {
+            if (sounds.bomb) {
+                sounds.bomb.currentTime = 0;
+                sounds.bomb.play().catch(e => console.log("Не удалось воспроизвести звук взрыва"));
+            }
+        }
+
         function playBackgroundMusic() {
-            if (sounds.music) {
+            if (sounds.music && !isMobile) {
                 sounds.music.play().catch(e => console.log("Не удалось воспроизвести музыку"));
             }
         }
 
         function render() {
-            // Очистка canvas
             ctx.clearRect(0, 0, WIDTH, HEIGHT);
             
-            // Отрисовка фона
             drawBackground();
-            
-            // Отрисовка платформы
             drawPlatform();
-
-            // Отрисовка мячей
             balls.forEach(ball => drawBall(ball));
-
-            // Отрисовка бонусов
             powerups.forEach(powerup => drawPowerup(powerup));
+            bombs.forEach(bomb => drawBomb(bomb));
         }
 
         function drawBackground() {
@@ -740,34 +772,28 @@
             } else if (images.background1) {
                 ctx.drawImage(images.background1, 0, 0, WIDTH, HEIGHT);
             } else {
-                // Запасной фон
                 ctx.fillStyle = currentLevel >= 3 ? '#e55039' : '#1e3799';
                 ctx.fillRect(0, 0, WIDTH, HEIGHT);
             }
         }
 
         function drawPlatform() {
-            // Основная часть
             ctx.fillStyle = platform.color;
             ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
             
-            // Тень
             ctx.fillStyle = '#DB7093';
             ctx.fillRect(platform.x, platform.y + platform.height - 3, platform.width, 3);
             
-            // Блик
             ctx.fillStyle = '#FFFFFF';
             ctx.fillRect(platform.x, platform.y, platform.width, 2);
         }
 
         function drawBall(ball) {
-            // Основной шар
             ctx.fillStyle = ball.color;
             ctx.beginPath();
             ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
             ctx.fill();
 
-            // Блик
             ctx.fillStyle = '#E0FFFF';
             ctx.beginPath();
             ctx.arc(ball.x - ball.radius/3, ball.y - ball.radius/3, ball.radius/2, 0, Math.PI * 2);
@@ -775,16 +801,13 @@
         }
 
         function drawPowerup(powerup) {
-            // Основной квадрат
             ctx.fillStyle = powerup.color;
             ctx.fillRect(powerup.x, powerup.y, powerup.size, powerup.size);
             
-            // Обводка
             ctx.strokeStyle = '#FFFFFF';
             ctx.lineWidth = 2;
             ctx.strokeRect(powerup.x, powerup.y, powerup.size, powerup.size);
             
-            // Символ
             ctx.fillStyle = '#FFFFFF';
             const fontSize = Math.max(12, powerup.size * 0.6);
             ctx.font = `bold ${fontSize}px Arial`;
@@ -795,9 +818,43 @@
             ctx.fillText(symbol, powerup.x + powerup.size/2, powerup.y + powerup.size/2);
         }
 
+        function drawBomb(bomb) {
+            // Рисуем бомбу с шипами
+            ctx.fillStyle = bomb.color;
+            ctx.beginPath();
+            ctx.arc(bomb.x + bomb.size/2, bomb.y + bomb.size/2, bomb.size/2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Шипы
+            ctx.strokeStyle = '#FF0000';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < 8; i++) {
+                const angle = (i / 8) * Math.PI * 2;
+                const spikeLength = bomb.size * 0.3;
+                const startX = bomb.x + bomb.size/2 + Math.cos(angle) * (bomb.size/2);
+                const startY = bomb.y + bomb.size/2 + Math.sin(angle) * (bomb.size/2);
+                const endX = bomb.x + bomb.size/2 + Math.cos(angle) * (bomb.size/2 + spikeLength);
+                const endY = bomb.y + bomb.size/2 + Math.sin(angle) * (bomb.size/2 + spikeLength);
+                
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(endX, endY);
+                ctx.stroke();
+            }
+            
+            // Символ бомбы
+            ctx.fillStyle = '#FFFFFF';
+            const fontSize = Math.max(12, bomb.size * 0.4);
+            ctx.font = `bold ${fontSize}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('💣', bomb.x + bomb.size/2, bomb.y + bomb.size/2);
+        }
+
         function updateUI() {
             document.getElementById('score').textContent = score;
             document.getElementById('level').textContent = currentLevel;
+            document.getElementById('balls').textContent = balls.length;
         }
 
         function endGame() {
@@ -819,7 +876,6 @@
             if (window.Telegram && Telegram.WebApp) {
                 Telegram.WebApp.close();
             } else {
-                // Если не в Telegram, просто скрываем игру
                 document.getElementById('gameOver').style.display = 'none';
                 document.getElementById('pauseScreen').style.display = 'none';
             }
