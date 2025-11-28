@@ -302,10 +302,10 @@
                 
                 if (e.key === 'ArrowLeft') {
                     // На компьютере скорость в 2 раза выше
-                    platform.x = Math.max(0, platform.x - platform.speed * 2);
+                    platform.x = Math.max(0, platform.x - platform.speed * 4);
                 } else if (e.key === 'ArrowRight') {
                     // На компьютере скорость в 2 раза выше
-                    platform.x = Math.min(WIDTH - platform.width, platform.x + platform.speed * 2);
+                    platform.x = Math.min(WIDTH - platform.width, platform.x + platform.speed * 4);
                 }
             });
             
