@@ -123,15 +123,15 @@
         // Конфигурация игры
         const config = {
             LEVEL_SETTINGS: {
-                1: { speed: 4.0, bouncesNeeded: 24 },
-                2: { speed: 6.0, bouncesNeeded: 24 },
-                3: { speed: 8.0, bouncesNeeded: 24 },
-                4: { speed: 10.0, bouncesNeeded: 24 },
-                5: { speed: 12.0, bouncesNeeded: 24 },
-                6: { speed: 14.0, bouncesNeeded: 24 },
-                7: { speed: 16.0, bouncesNeeded: 24 },
+                1: { speed: 8.0, bouncesNeeded: 24 },
+                2: { speed: 9.0, bouncesNeeded: 24 },
+                3: { speed: 10.0, bouncesNeeded: 24 },
+                4: { speed: 12.0, bouncesNeeded: 24 },
+                5: { speed: 14.0, bouncesNeeded: 24 },
+                6: { speed: 16.0, bouncesNeeded: 24 },
+                7: { speed: 17.0, bouncesNeeded: 24 },
                 8: { speed: 18.0, bouncesNeeded: 24 },
-                9: { speed: 20.0, bouncesNeeded: 24 },
+                9: { speed: 19.0, bouncesNeeded: 24 },
                 10: { speed: 22.0, bouncesNeeded: 9999 }
             },
             POWERUP_CHANCE: 0.15,
@@ -282,13 +282,14 @@
 
         function setupControls() {
             // Клавиатура (для ПК)
+            // На компьютере скорость в 2 раза выше
             window.addEventListener('keydown', (e) => {
                 if (gameOver) return;
                 
                 if (e.key === 'ArrowLeft') {
-                    platform.x = Math.max(0, platform.x - platform.speed);
+                    platform.x = Math.max(0, platform.x - platform.speed * 2);
                 } else if (e.key === 'ArrowRight') {
-                    platform.x = Math.min(WIDTH - platform.width, platform.x + platform.speed);
+                    platform.x = Math.min(WIDTH - platform.width, platform.x + platform.speed * 2);
                 }
             });
             
