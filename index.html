@@ -98,10 +98,6 @@
             background: #ff6b6b;
         }
 
-        #quitBtn:hover {
-            background: #ff5252;
-        }
-
         #levelUp {
             position: absolute;
             top: 50%;
@@ -144,23 +140,16 @@
             z-index: 20;
         }
 
-        /* Скрываем кнопки управления */
-        #touchControls {
-            display: none;
-        }
-
         h1 {
             font-size: 48px;
             margin-bottom: 30px;
             color: #ffd700;
-            text-shadow: 0 0 10px rgba(255,215,0,0.5);
         }
 
         p {
             font-size: 24px;
             margin-bottom: 20px;
             max-width: 80%;
-            line-height: 1.5;
         }
 
         #initialsInput {
@@ -188,16 +177,11 @@
             <div>🐱 Счет: <span id="score">0</span></div>
         </div>
         
-        <div id="touchControls">
-            <div class="touch-btn" id="leftBtn">←</div>
-            <div class="touch-btn" id="rightBtn">→</div>
-        </div>
-        
         <div id="levelUp">УРОВЕНЬ <span id="levelNumber">2</span>!</div>
         
         <div id="startScreen">
             <h1>Поймай мячик, кис! 🐱</h1>
-            <p>Лови мячики, собирай бонусы и избегай бомб!<br>Управляй платформой с помощью клавиш ← → или касанием экрана.</p>
+            <p>Лови мячики, собирай бонусы и избегай бомб!</p>
             <button class="game-btn" onclick="startGame()">Готова, кис? 😼</button>
         </div>
         
@@ -219,165 +203,84 @@
             </div>
             
             <div id="newHighScore" style="display: none; margin: 20px 0;">
-                <p>🎉 Новый рекорд! Введите ваши инициалы (3 буквы):</p>
+                <p>🎉 Новый рекорд! Введите инициалы (3 буквы):</p>
                 <input type="text" id="initialsInput" maxlength="3" placeholder="ABC">
                 <button class="game-btn" onclick="saveHighScore()">💾 Сохранить</button>
             </div>
             
-            <button class="game-btn" onclick="restartGame()">🎮 Играть снова, кис!</button>
+            <button class="game-btn" onclick="restartGame()">🎮 Играть снова</button>
             <button class="game-btn" id="quitBtn" onclick="closeGame()">🚪 Выйти</button>
         </div>
     </div>
 
     <script>
-        // Конфигурация игры
+        // Упрощенная конфигурация для стабильности
         const config = {
             LEVEL_SETTINGS: {
-                1: { speed: 7.0, bouncesNeeded: 24, theme: 'air' },
-                2: { speed: 9.0, bouncesNeeded: 24, theme: 'air' },
-                3: { speed: 11.0, bouncesNeeded: 24, theme: 'water' },
-                4: { speed: 13.0, bouncesNeeded: 24, theme: 'water' },
-                5: { speed: 15.0, bouncesNeeded: 24, theme: 'earth' },
-                6: { speed: 17.0, bouncesNeeded: 24, theme: 'earth' },
-                7: { speed: 19.0, bouncesNeeded: 24, theme: 'lava' },
-                8: { speed: 21.0, bouncesNeeded: 24, theme: 'lava' },
-                9: { speed: 23.0, bouncesNeeded: 24, theme: 'space' },
-                10: { speed: 25.0, bouncesNeeded: 24, theme: 'space' },
-                11: { speed: 27.0, bouncesNeeded: 24, theme: 'space' },
-                12: { speed: 29.0, bouncesNeeded: 24, theme: 'space' },
-                13: { speed: 31.0, bouncesNeeded: 24, theme: 'space' },
-                14: { speed: 33.0, bouncesNeeded: 24, theme: 'space' },
-                15: { speed: 35.0, bouncesNeeded: 9999, theme: 'space' }
+                1: { speed: 7.0, bouncesNeeded: 15, theme: 'air' },
+                2: { speed: 9.0, bouncesNeeded: 15, theme: 'air' },
+                3: { speed: 11.0, bouncesNeeded: 15, theme: 'water' },
+                4: { speed: 13.0, bouncesNeeded: 15, theme: 'water' },
+                5: { speed: 15.0, bouncesNeeded: 15, theme: 'earth' }
             },
-            POWERUP_CHANCE: 0.3,
-            POWERUP_TYPES: ["expand", "shrink", "slow", "fast", "multi", "bomb"],
+            POWERUP_CHANCE: 0.2,
             POWERUP_DURATION: 5000,
-            BOMB_CHANCE: 0.1,
-            BOMB_CHANCE_AFTER_70: 0.25,
-            PORTAL_CHANCE: 0.05,
-            BALL_TYPES: ["normal", "sticky", "split", "magnetic", "ghost"]
+            BOMB_CHANCE: 0.08,
+            PORTAL_CHANCE: 0.03,
+            MAX_BALLS: 8,
+            MAX_PARTICLES: 50
         };
 
         // Игровые переменные
         let canvas, ctx;
-        let platform, balls, powerups, activePowerups, bombs, portals, particles;
-        let score = 0;
-        let currentLevel = 1;
-        let bouncesInCurrentLevel = 0;
-        let gameOver = false;
-        let isPaused = false;
-        let lastTime = 0;
-        let gameStarted = false;
-        let bombAnimationTime = 0;
-        let originalPlatformY = 0;
-        let highScores = [];
-        let keys = {};
-        let platformVelocity = 0;
-        
-        // Размеры canvas (будут установлены при инициализации)
+        let platform, balls = [], powerups = [], bombs = [], portals = [], particles = [];
+        let activePowerups = {};
+        let score = 0, currentLevel = 1, bouncesInCurrentLevel = 0;
+        let gameOver = false, isPaused = false, gameStarted = false;
+        let lastTime = 0, originalPlatformY = 0;
+        let highScores = [], keys = {};
+        let platformVelocity = 0, animationId = null;
+
         let WIDTH, HEIGHT;
         
-        // Определение устройства
-        let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        
-        // Множитель скорости для мобильных устройств
-        const MOBILE_SPEED_MULTIPLIER = 1.0;
-        
-        // Цвета для платформы и мячей
-        const platformColors = ['#FFB6C1', '#ADD8E6', '#98FB98', '#DDA0DD', '#F0E68C', '#FFA07A', '#87CEEB', '#FFD700'];
-        const ballColors = ['#ADD8E6', '#FFB6C1', '#98FB98', '#DDA0DD', '#F0E68C', '#87CEEB', '#FFA07A', '#FFD700'];
-        let currentPlatformColorIndex = 0;
-        let currentBallColorIndex = 0;
-        
-        // Загрузка ресурсов
-        const images = {
-            background1: null,
-            background3: null,
-            background6: null,
-            background10: null,
-            background14: null
-        };
-        
-        const sounds = {
-            hit: null,
-            music: null,
-            bomb: null
-        };
-
-        // Цвета для бонусов и бомб - ХОРОШИЕ (зеленые) и ПЛОХИЕ (красные)
+        // Цвета
+        const platformColors = ['#FFB6C1', '#ADD8E6', '#98FB98'];
+        const ballColors = ['#ADD8E6', '#FFB6C1', '#98FB98'];
         const POWERUP_COLORS = {
-            expand: '#4CAF50',
-            shrink: '#F44336',
-            slow: '#4CAF50',
-            fast: '#F44336',
-            multi: '#4CAF50',
-            bomb: '#F44336'
+            expand: '#4CAF50', shrink: '#F44336', slow: '#4CAF50', 
+            fast: '#F44336', multi: '#4CAF50', bomb: '#F44336'
         };
-
-        // Символы для бонусов (без эмодзи)
         const POWERUP_SYMBOLS = {
-            expand: '+',
-            shrink: '-',
-            slow: '↓',
-            fast: '↑',
-            multi: 'x2',
-            bomb: '!'
+            expand: '+', shrink: '-', slow: '↓', fast: '↑', multi: 'x2', bomb: '!'
         };
-
-        // Тематические цвета для фонов
         const THEME_COLORS = {
             air: ['#87CEEB', '#E0F7FA', '#B3E5FC'],
             water: ['#1E88E5', '#4FC3F7', '#80DEEA'],
-            earth: ['#795548', '#8D6E63', '#A1887F'],
-            lava: ['#FF5722', '#FF7043', '#FF8A65'],
-            space: ['#0D47A1', '#1A237E', '#311B92']
+            earth: ['#795548', '#8D6E63', '#A1887F']
         };
 
-        // Функция для получения скорости с учетом типа устройства
-        function getBallSpeed(level) {
-            let baseSpeed = config.LEVEL_SETTINGS[level].speed * (WIDTH / 800);
-            if (isMobile) {
-                const mobileBaseSpeed = 10 + (level - 1) * 2;
-                return mobileBaseSpeed * (WIDTH / 800) * MOBILE_SPEED_MULTIPLIER;
-            }
-            return baseSpeed;
-        }
-
-        // Инициализация игры
-        async function init() {
+        // Основные функции
+        function init() {
             canvas = document.getElementById('gameCanvas');
             ctx = canvas.getContext('2d');
             
-            // Загрузка рекордов
             loadHighScores();
-            
-            // Установка размеров canvas
             setupCanvasSize();
-            
-            // Загрузка ресурсов
-            await loadResources();
-            
-            // Настройка управления
             setupControls();
             
-            // Показываем начальный экран
             document.getElementById('startScreen').style.display = 'flex';
-            
-            // Запуск музыки
-            playBackgroundMusic();
         }
 
         function startGame() {
             document.getElementById('startScreen').style.display = 'none';
             gameStarted = true;
             resetGame();
-            requestAnimationFrame(gameLoop);
+            gameLoop();
         }
 
         function setupCanvasSize() {
             WIDTH = window.innerWidth;
             HEIGHT = window.innerHeight;
-            
             canvas.width = WIDTH;
             canvas.height = HEIGHT;
             
@@ -389,169 +292,34 @@
             });
         }
 
-        async function loadResources() {
-            try {
-                images.background1 = await loadImage('generated_image_20251128184952.jpg');
-                images.background3 = await loadImage('1212.jpg');
-                images.background6 = await loadImage('4.jpg');
-                images.background10 = await loadImage('3.jpg');
-                images.background14 = await loadImage('2.jpg');
-                
-                sounds.hit = new Audio('DP2_Gang_Rim_Hit.wav');
-                sounds.music = new Audio('U.mp3');
-                sounds.bomb = new Audio('DP2_Gang_Rim_Hit.wav');
-                
-                sounds.hit.volume = 0.7;
-                sounds.music.volume = 0.5;
-                sounds.music.loop = true;
-                sounds.bomb.volume = 0.8;
-                
-            } catch (error) {
-                console.log("Некоторые ресурсы не загружены, игра продолжается без них");
-                createFallbackBackgrounds();
-            }
-        }
-
-        function loadImage(src) {
-            return new Promise((resolve, reject) => {
-                const img = new Image();
-                img.onload = () => resolve(img);
-                img.onerror = reject;
-                img.src = src;
-            });
-        }
-
-        function createFallbackBackgrounds() {
-            const createGradientBackground = (color1, color2) => {
-                const canvas = document.createElement('canvas');
-                canvas.width = 800;
-                canvas.height = 600;
-                const ctx = canvas.getContext('2d');
-                
-                const gradient = ctx.createLinearGradient(0, 0, 800, 600);
-                gradient.addColorStop(0, color1);
-                gradient.addColorStop(1, color2);
-                ctx.fillStyle = gradient;
-                ctx.fillRect(0, 0, 800, 600);
-                
-                return canvas;
-            };
-            
-            images.background1 = createGradientBackground('#0c2461', '#1e3799');
-            images.background3 = createGradientBackground('#e55039', '#eb2f06');
-            images.background6 = createGradientBackground('#3c6382', '#0a3d62');
-            images.background10 = createGradientBackground('#b71540', '#eb2f06');
-            images.background14 = createGradientBackground('#0c2461', '#3c6382');
-        }
-
-        // Функции для работы с рекордами
-        function loadHighScores() {
-            const saved = localStorage.getItem('highScores');
-            if (saved) {
-                highScores = JSON.parse(saved);
-            } else {
-                highScores = [
-                    { name: "КИС", score: 100 },
-                    { name: "МУР", score: 75 },
-                    { name: "ПУХ", score: 50 }
-                ];
-            }
-        }
-
-        function saveHighScores() {
-            localStorage.setItem('highScores', JSON.stringify(highScores));
-        }
-
-        function updateHighScoresDisplay() {
-            const list = document.getElementById('highScoresList');
-            list.innerHTML = '';
-            
-            highScores.slice(0, 5).forEach(score => {
-                const div = document.createElement('div');
-                div.textContent = `${score.name}: ${score.score}`;
-                list.appendChild(div);
-            });
-        }
-
-        function checkNewHighScore() {
-            if (highScores.length < 5 || score > highScores[highScores.length - 1].score) {
-                document.getElementById('newHighScore').style.display = 'block';
-                return true;
-            }
-            return false;
-        }
-
-        function saveHighScore() {
-            const initials = document.getElementById('initialsInput').value.toUpperCase().substr(0, 3);
-            if (initials.length === 0) {
-                alert('Пожалуйста, введите 3 буквы!');
-                return;
-            }
-            
-            highScores.push({ name: initials, score: score });
-            highScores.sort((a, b) => b.score - a.score);
-            highScores = highScores.slice(0, 5);
-            
-            saveHighScores();
-            updateHighScoresDisplay();
-            
-            document.getElementById('newHighScore').style.display = 'none';
-        }
-
         function setupControls() {
-            // Плавное управление клавиатурой
+            // Управление клавиатурой
             window.addEventListener('keydown', (e) => {
                 if (gameOver || isPaused || !gameStarted) return;
                 keys[e.key] = true;
-                
-                if (e.key === ' ' || e.key === 'Escape') {
-                    togglePause();
-                }
+                if (e.key === ' ' || e.key === 'Escape') togglePause();
             });
             
             window.addEventListener('keyup', (e) => {
                 keys[e.key] = false;
             });
-            
-            // Сенсорное управление (для мобильных)
+
+            // Сенсорное управление
             let touchStartX = 0;
-            let isMoving = false;
-            
             canvas.addEventListener('touchstart', (e) => {
                 if (isPaused || !gameStarted) return;
                 touchStartX = e.touches[0].clientX;
-                isMoving = true;
                 e.preventDefault();
             });
             
             canvas.addEventListener('touchmove', (e) => {
-                if (!isMoving || gameOver || isPaused || !gameStarted) return;
-                
+                if (gameOver || isPaused || !gameStarted) return;
                 const touchX = e.touches[0].clientX;
                 const gameX = touchX * (WIDTH / window.innerWidth);
-                
                 platform.x = Math.max(0, Math.min(WIDTH - platform.width, gameX - platform.width / 2));
-                
                 e.preventDefault();
             });
-            
-            canvas.addEventListener('touchend', () => {
-                isMoving = false;
-            });
-            
-            // Двойное касание для паузы на мобильных
-            let lastTouchTime = 0;
-            canvas.addEventListener('touchend', (e) => {
-                if (gameOver || !gameStarted) return;
-                const currentTime = new Date().getTime();
-                const timeDiff = currentTime - lastTouchTime;
-                if (timeDiff < 300 && timeDiff > 0) {
-                    togglePause();
-                }
-                lastTouchTime = currentTime;
-            });
-            
-            // Кнопка паузы
+
             document.getElementById('pauseBtn').addEventListener('click', togglePause);
         }
 
@@ -561,72 +329,54 @@
             isPaused = !isPaused;
             if (isPaused) {
                 document.getElementById('pauseScreen').style.display = 'flex';
-                if (sounds.music) {
-                    sounds.music.pause();
-                }
+                cancelAnimationFrame(animationId);
             } else {
                 document.getElementById('pauseScreen').style.display = 'none';
-                if (sounds.music) {
-                    sounds.music.play().catch(e => console.log("Не удалось возобновить музыку"));
-                }
-                requestAnimationFrame(gameLoop);
+                gameLoop();
             }
-        }
-
-        function resumeGame() {
-            isPaused = false;
-            document.getElementById('pauseScreen').style.display = 'none';
-            if (sounds.music) {
-                sounds.music.play().catch(e => console.log("Не удалось возобновить музыку"));
-            }
-            requestAnimationFrame(gameLoop);
         }
 
         function resetGame() {
-            const platformWidth = Math.min(150, WIDTH * 0.2);
-            const platformHeight = Math.max(15, HEIGHT * 0.02);
-            
-            const baseSpeed = WIDTH * 0.02;
-            
-            originalPlatformY = HEIGHT * 0.85 - platformHeight;
-            
-            platform = {
-                width: platformWidth,
-                height: platformHeight,
-                x: WIDTH / 2 - platformWidth / 2,
-                y: originalPlatformY,
-                speed: baseSpeed,
-                color: platformColors[currentPlatformColorIndex],
-                originalY: originalPlatformY,
-                targetX: WIDTH / 2 - platformWidth / 2
-            };
-
-            const ballRadius = Math.max(10, Math.min(20, WIDTH * 0.02));
-            const angle = Math.random() * Math.PI/2 + Math.PI/4;
-            const speed = getBallSpeed(1);
-            
-            balls = [{
-                x: WIDTH / 2,
-                y: HEIGHT / 3,
-                radius: ballRadius,
-                dx: Math.cos(angle) * speed,
-                dy: Math.sin(angle) * speed,
-                color: ballColors[currentBallColorIndex],
-                type: 'normal',
-                trail: []
-            }];
-
+            // Сброс всех массивов
+            balls = [];
             powerups = [];
             bombs = [];
             portals = [];
             particles = [];
             activePowerups = {};
+            
+            // Платформа
+            const platformWidth = Math.min(150, WIDTH * 0.2);
+            originalPlatformY = HEIGHT * 0.85 - 20;
+            
+            platform = {
+                width: platformWidth,
+                height: 20,
+                x: WIDTH / 2 - platformWidth / 2,
+                y: originalPlatformY,
+                speed: WIDTH * 0.02,
+                color: platformColors[0]
+            };
+
+            // Первый мяч
+            const ballRadius = Math.max(10, WIDTH * 0.02);
+            balls.push({
+                x: WIDTH / 2,
+                y: HEIGHT / 3,
+                radius: ballRadius,
+                dx: 7 * (WIDTH / 800),
+                dy: 7 * (WIDTH / 800),
+                color: ballColors[0],
+                type: 'normal',
+                trail: []
+            });
+
+            // Сброс состояния
             score = 0;
             currentLevel = 1;
             bouncesInCurrentLevel = 0;
             gameOver = false;
             isPaused = false;
-            bombAnimationTime = 0;
             platformVelocity = 0;
             keys = {};
 
@@ -635,96 +385,71 @@
 
         function gameLoop(timestamp) {
             if (!lastTime) lastTime = timestamp;
-            const deltaTime = Math.min(timestamp - lastTime, 1000/30); // Ограничиваем deltaTime
+            const deltaTime = Math.min(timestamp - lastTime, 1000/30);
             lastTime = timestamp;
-
-            bombAnimationTime += deltaTime;
 
             if (!gameOver && !isPaused && gameStarted) {
                 update(deltaTime);
                 render();
-                requestAnimationFrame(gameLoop);
+                animationId = requestAnimationFrame(gameLoop);
             }
         }
 
         function update(deltaTime) {
             updatePlatform(deltaTime);
+            updateBalls(deltaTime);
             updatePowerups();
             updateBombs();
             updatePortals();
             updateParticles(deltaTime);
             
-            // Обновляем мячи и проверяем столкновения
-            updateBalls(deltaTime);
-            checkBallCollisions();
-
-            balls = balls.filter(ball => ball.y - ball.radius <= HEIGHT);
-
+            // Проверка конца игры
             if (balls.length === 0) {
                 endGame();
+                return;
             }
             
             updatePlatformPosition();
             
-            // Создание порталов
+            // Случайные события
             if (Math.random() < config.PORTAL_CHANCE && portals.length < 2) {
                 createPortal();
+            }
+            if (Math.random() < config.POWERUP_CHANCE && powerups.length < 2) {
+                createPowerup();
             }
         }
 
         function updatePlatform(deltaTime) {
-            const acceleration = 0.002 * deltaTime;
-            const friction = 0.9;
+            const acceleration = 0.001 * deltaTime;
+            const friction = 0.92;
             
-            if (keys['ArrowLeft']) {
-                platformVelocity -= acceleration;
-            }
-            if (keys['ArrowRight']) {
-                platformVelocity += acceleration;
-            }
+            if (keys['ArrowLeft']) platformVelocity -= acceleration;
+            if (keys['ArrowRight']) platformVelocity += acceleration;
             
-            // Применяем трение
             platformVelocity *= friction;
-            
-            // Ограничиваем максимальную скорость
             platformVelocity = Math.max(-platform.speed, Math.min(platform.speed, platformVelocity));
             
-            // Обновляем позицию
             platform.x += platformVelocity * deltaTime;
             platform.x = Math.max(0, Math.min(WIDTH - platform.width, platform.x));
             
-            // Создаем частицы пыли при движении
-            if (Math.abs(platformVelocity) > 0.1) {
+            // Пыль при движении
+            if (Math.abs(platformVelocity) > 0.1 && particles.length < config.MAX_PARTICLES) {
                 createDustParticles();
             }
         }
 
-        function updatePlatformPosition() {
-            const maxLift = HEIGHT * 0.3;
-            const liftIncrement = maxLift / 10;
-            
-            const scoreLift = Math.floor(score / 50) * liftIncrement;
-            const finalLift = Math.min(maxLift, scoreLift);
-            
-            platform.y = originalPlatformY - finalLift;
-        }
-
         function updateBalls(deltaTime) {
-            balls.forEach((ball, index) => {
-                // Обновляем след
+            balls.forEach(ball => {
+                // След (ограниченной длины)
                 ball.trail.push({x: ball.x, y: ball.y});
-                if (ball.trail.length > 10) {
-                    ball.trail.shift();
-                }
+                if (ball.trail.length > 8) ball.trail.shift();
                 
-                // Применяем специальное поведение в зависимости от типа мяча
-                applyBallBehavior(ball, deltaTime);
-                
-                // Обновляем позицию
+                // Движение
                 ball.x += ball.dx * (deltaTime / 16);
                 ball.y += ball.dy * (deltaTime / 16);
 
-                // Проверяем столкновение со стенами
+                // Стены
                 if (ball.x - ball.radius <= 0 || ball.x + ball.radius >= WIDTH) {
                     ball.dx = -ball.dx;
                     ball.x = Math.max(ball.radius, Math.min(WIDTH - ball.radius, ball.x));
@@ -737,52 +462,21 @@
                     createCollisionParticles(ball.x, ball.y, ball.color);
                 }
 
-                // Проверяем столкновение с платформой
+                // Платформа
                 if (ball.y + ball.radius >= platform.y && 
                     ball.y - ball.radius <= platform.y + platform.height &&
                     ball.x >= platform.x && 
                     ball.x <= platform.x + platform.width) {
-                    
                     handlePlatformCollision(ball);
                 }
                 
-                // Проверяем телепортацию через порталы
+                // Портал
                 checkPortalCollision(ball);
             });
-        }
-
-        function applyBallBehavior(ball, deltaTime) {
-            switch(ball.type) {
-                case 'sticky':
-                    // Липкий мяч слегка притягивается к платформе
-                    if (ball.y > HEIGHT / 2) {
-                        const dx = platform.x + platform.width/2 - ball.x;
-                        ball.dx += dx * 0.0001 * deltaTime;
-                    }
-                    break;
-                case 'magnetic':
-                    // Магнитный мяч притягивает другие мячи
-                    balls.forEach(otherBall => {
-                        if (otherBall !== ball) {
-                            const dx = ball.x - otherBall.x;
-                            const dy = ball.y - otherBall.y;
-                            const distance = Math.sqrt(dx*dx + dy*dy);
-                            
-                            if (distance < 150 && distance > 0) {
-                                const force = 0.5 / (distance * distance);
-                                otherBall.dx += (dx / distance) * force * deltaTime;
-                                otherBall.dy += (dy / distance) * force * deltaTime;
-                            }
-                        }
-                    });
-                    break;
-                case 'ghost':
-                    // Призрачный мяч иногда проходит сквозь платформу
-                    if (Math.random() < 0.005) {
-                        ball.ghost = true;
-                        setTimeout(() => { ball.ghost = false; }, 1000);
-                    }
-                    break;
+            
+            // Проверка столкновений мячей (только если их немного)
+            if (balls.length <= 6) {
+                checkBallCollisions();
             }
         }
 
@@ -797,56 +491,39 @@
                     const distance = Math.sqrt(dx*dx + dy*dy);
                     
                     if (distance < ball1.radius + ball2.radius) {
-                        // Столкновение мячей
                         handleBallCollision(ball1, ball2);
                         createCollisionParticles(
                             (ball1.x + ball2.x) / 2, 
                             (ball1.y + ball2.y) / 2,
                             ball1.color
                         );
-                        
-                        // Разделяющийся мяч
-                        if (ball1.type === 'split' && balls.length < 10) {
-                            splitBall(ball1);
-                        }
-                        if (ball2.type === 'split' && balls.length < 10) {
-                            splitBall(ball2);
-                        }
                     }
                 }
             }
         }
 
         function handleBallCollision(ball1, ball2) {
-            // Простой физический расчет столкновения
             const dx = ball2.x - ball1.x;
             const dy = ball2.y - ball1.y;
             const distance = Math.sqrt(dx*dx + dy*dy);
             
-            // Нормализованный вектор столкновения
             const nx = dx / distance;
             const ny = dy / distance;
             
-            // Относительная скорость
             const dvx = ball2.dx - ball1.dx;
             const dvy = ball2.dy - ball1.dy;
-            
-            // Скорость вдоль нормали
             const speed = dvx * nx + dvy * ny;
             
-            // Мячи не сталкиваются, если удаляются друг от друга
             if (speed > 0) return;
             
-            // Импульс столкновения
-            const impulse = 2 * speed / (1/ball1.radius + 1/ball2.radius);
+            const impulse = 1.8 * speed / (1/ball1.radius + 1/ball2.radius);
             
-            // Изменяем скорости
             ball1.dx += impulse * nx / ball1.radius;
             ball1.dy += impulse * ny / ball1.radius;
             ball2.dx -= impulse * nx / ball2.radius;
             ball2.dy -= impulse * ny / ball2.radius;
             
-            // Разделяем мячи, чтобы они не застряли
+            // Разделение
             const overlap = (ball1.radius + ball2.radius - distance) / 2;
             ball1.x -= overlap * nx;
             ball1.y -= overlap * ny;
@@ -854,188 +531,103 @@
             ball2.y += overlap * ny;
         }
 
-        function splitBall(ball) {
-            const newBall1 = {...ball};
-            const newBall2 = {...ball};
-            
-            newBall1.dx = -ball.dx * 0.8;
-            newBall1.dy = -ball.dy * 0.8;
-            newBall1.radius = ball.radius * 0.7;
-            newBall1.trail = [];
-            
-            newBall2.dx = ball.dx * 0.8;
-            newBall2.dy = ball.dy * 0.8;
-            newBall2.radius = ball.radius * 0.7;
-            newBall2.trail = [];
-            
-            balls.push(newBall1, newBall2);
-            balls.splice(balls.indexOf(ball), 1);
-        }
-
         function handlePlatformCollision(ball) {
-            if (ball.ghost) return;
-            
-            const relativeIntersectX = (platform.x + platform.width / 2) - ball.x;
-            const normalizedX = relativeIntersectX / (platform.width / 2);
+            const relativeX = (platform.x + platform.width / 2) - ball.x;
+            const normalizedX = relativeX / (platform.width / 2);
             const bounceAngle = normalizedX * (Math.PI / 3);
 
-            const currentSpeed = getBallSpeed(currentLevel);
+            const speed = config.LEVEL_SETTINGS[currentLevel].speed * (WIDTH / 800);
             
-            ball.dx = -currentSpeed * Math.sin(bounceAngle);
-            ball.dy = -Math.abs(currentSpeed * Math.cos(bounceAngle));
+            ball.dx = -speed * Math.sin(bounceAngle);
+            ball.dy = -Math.abs(speed * Math.cos(bounceAngle));
 
             score++;
             bouncesInCurrentLevel++;
 
             if (bouncesInCurrentLevel >= config.LEVEL_SETTINGS[currentLevel].bouncesNeeded) {
                 if (currentLevel < Object.keys(config.LEVEL_SETTINGS).length) {
-                    showLevelUp(currentLevel + 1);
-                    currentLevel++;
-                    bouncesInCurrentLevel = 0;
-                    
-                    balls.forEach(b => {
-                        const speed = Math.sqrt(b.dx * b.dx + b.dy * b.dy);
-                        const newSpeed = getBallSpeed(currentLevel);
-                        b.dx = (b.dx / speed) * newSpeed;
-                        b.dy = (b.dy / speed) * newSpeed;
-                    });
+                    levelUp();
                 }
-            }
-
-            const maxPlatformWidth = WIDTH * 0.4;
-            platform.width = Math.min(maxPlatformWidth, Math.min(150, WIDTH * 0.2) * (1 + 0.001 * score));
-            
-            if (platform.x + platform.width > WIDTH) {
-                platform.x = WIDTH - platform.width;
-            }
-
-            changeColors();
-
-            const currentBombChance = score >= 70 ? config.BOMB_CHANCE_AFTER_70 : config.BOMB_CHANCE;
-            
-            if (Math.random() < config.POWERUP_CHANCE && powerups.length < 3) {
-                createPowerup(currentBombChance);
-            }
-
-            // Случайно меняем тип мяча
-            if (Math.random() < 0.1 && balls.length === 1) {
-                ball.type = config.BALL_TYPES[Math.floor(Math.random() * config.BALL_TYPES.length)];
             }
 
             playHitSound();
             updateUI();
         }
 
-        function changeColors() {
-            currentPlatformColorIndex = (currentPlatformColorIndex + 1) % platformColors.length;
-            platform.color = platformColors[currentPlatformColorIndex];
+        function levelUp() {
+            showLevelUp(currentLevel + 1);
+            currentLevel++;
+            bouncesInCurrentLevel = 0;
             
-            currentBallColorIndex = (currentBallColorIndex + 1) % ballColors.length;
             balls.forEach(ball => {
-                ball.color = ballColors[currentBallColorIndex];
+                const currentSpeed = Math.sqrt(ball.dx*ball.dx + ball.dy*ball.dy);
+                const newSpeed = config.LEVEL_SETTINGS[currentLevel].speed * (WIDTH / 800);
+                ball.dx = (ball.dx / currentSpeed) * newSpeed;
+                ball.dy = (ball.dy / currentSpeed) * newSpeed;
             });
         }
 
-        function showLevelUp(newLevel) {
-            const levelUp = document.getElementById('levelUp');
-            const levelNumber = document.getElementById('levelNumber');
-            
-            levelNumber.textContent = newLevel;
-            levelUp.style.display = 'block';
-            
-            setTimeout(() => {
-                levelUp.style.display = 'none';
-            }, 2000);
-        }
-
-        function createPowerup(bombChance) {
-            const powerupSize = Math.max(15, WIDTH * 0.03);
-            let type;
-            
-            if (Math.random() < bombChance) {
-                type = "bomb";
-            } else {
-                type = config.POWERUP_TYPES[Math.floor(Math.random() * (config.POWERUP_TYPES.length - 1))];
-            }
+        function createPowerup() {
+            const size = Math.max(15, WIDTH * 0.03);
+            const types = ["expand", "shrink", "slow", "fast", "multi", "bomb"];
+            const type = Math.random() < config.BOMB_CHANCE ? "bomb" : types[Math.floor(Math.random() * 5)];
             
             if (type === "bomb") {
                 bombs.push({
-                    x: Math.random() * (WIDTH - powerupSize * 2) + powerupSize,
+                    x: Math.random() * (WIDTH - size * 2) + size,
                     y: 0,
                     type: type,
-                    speed: 3 * (HEIGHT / 600),
-                    size: powerupSize,
-                    color: POWERUP_COLORS[type] || '#000000',
-                    pulsePhase: Math.random() * Math.PI * 2
+                    speed: 3,
+                    size: size
                 });
             } else {
                 powerups.push({
-                    x: Math.random() * (WIDTH - powerupSize * 2) + powerupSize,
+                    x: Math.random() * (WIDTH - size * 2) + size,
                     y: 0,
                     type: type,
-                    speed: 2 * (HEIGHT / 600),
-                    size: powerupSize,
-                    color: POWERUP_COLORS[type] || '#FFFFFF'
+                    speed: 2,
+                    size: size
                 });
             }
         }
 
         function createPortal() {
-            const portalSize = Math.max(30, WIDTH * 0.05);
-            const side = Math.random() > 0.5 ? 'left' : 'right';
-            
+            const size = Math.max(30, WIDTH * 0.05);
             portals.push({
-                x: side === 'left' ? portalSize : WIDTH - portalSize,
+                x: Math.random() > 0.5 ? size : WIDTH - size,
                 y: Math.random() * (HEIGHT * 0.6) + HEIGHT * 0.2,
-                size: portalSize,
-                side: side,
-                rotation: 0,
-                pair: null
+                size: size,
+                rotation: 0
             });
             
-            // Создаем парный портал
-            if (portals.length >= 2) {
-                const portal1 = portals[portals.length - 2];
-                const portal2 = portals[portals.length - 1];
-                portal1.pair = portal2;
-                portal2.pair = portal1;
+            if (portals.length > 2) {
+                portals.splice(0, 1);
             }
         }
 
-        function updatePowerupsMovement() {
+        function updatePowerups() {
+            // Движение бонусов
             powerups.forEach((powerup, index) => {
                 powerup.y += powerup.speed;
-
-                if (powerup.y + powerup.size >= platform.y && 
-                    powerup.y <= platform.y + platform.height &&
-                    powerup.x >= platform.x && 
-                    powerup.x <= platform.x + platform.width) {
-                    
+                if (powerup.y > HEIGHT) {
+                    powerups.splice(index, 1);
+                } else if (powerup.y + powerup.size >= platform.y && 
+                          powerup.x >= platform.x && 
+                          powerup.x <= platform.x + platform.width) {
                     activatePowerup(powerup.type);
                     powerups.splice(index, 1);
                 }
-
-                if (powerup.y > HEIGHT) {
-                    powerups.splice(index, 1);
-                }
             });
-        }
 
-        function updateBombsMovement() {
+            // Движение бомб
             bombs.forEach((bomb, index) => {
                 bomb.y += bomb.speed;
-
-                if (bomb.y + bomb.size >= platform.y && 
-                    bomb.y <= platform.y + platform.height &&
-                    bomb.x >= platform.x && 
-                    bomb.x <= platform.x + platform.width) {
-                    
-                    playBombSound();
-                    endGame();
-                }
-
                 if (bomb.y > HEIGHT) {
                     bombs.splice(index, 1);
+                } else if (bomb.y + bomb.size >= platform.y && 
+                          bomb.x >= platform.x && 
+                          bomb.x <= platform.x + platform.width) {
+                    endGame();
                 }
             });
         }
@@ -1044,11 +636,6 @@
             portals.forEach(portal => {
                 portal.rotation += 0.02;
             });
-            
-            // Удаляем старые порталы
-            if (portals.length > 4) {
-                portals.splice(0, 2);
-            }
         }
 
         function checkPortalCollision(ball) {
@@ -1057,60 +644,55 @@
                 const dy = ball.y - portal.y;
                 const distance = Math.sqrt(dx*dx + dy*dy);
                 
-                if (distance < portal.size / 2 + ball.radius && portal.pair) {
-                    // Телепортируем мяч
-                    ball.x = portal.pair.x;
-                    ball.y = portal.pair.y;
-                    
-                    // Сохраняем скорость, но немного меняем направление для эффекта
-                    const speed = Math.sqrt(ball.dx*ball.dx + ball.dy*ball.dy);
-                    const angle = Math.atan2(ball.dy, ball.dx) + (Math.random() - 0.5) * 0.5;
-                    ball.dx = Math.cos(angle) * speed;
-                    ball.dy = Math.sin(angle) * speed;
-                    
+                if (distance < portal.size / 2 + ball.radius) {
+                    // Простая телепортация
+                    ball.x = Math.random() * (WIDTH - ball.radius * 2) + ball.radius;
+                    ball.y = Math.random() * (HEIGHT * 0.4) + ball.radius;
                     createTeleportParticles(ball.x, ball.y);
                 }
             });
         }
 
         function createCollisionParticles(x, y, color) {
-            for (let i = 0; i < 8; i++) {
+            if (particles.length >= config.MAX_PARTICLES) return;
+            
+            for (let i = 0; i < 5; i++) {
                 particles.push({
-                    x: x,
-                    y: y,
-                    vx: (Math.random() - 0.5) * 8,
-                    vy: (Math.random() - 0.5) * 8,
+                    x: x, y: y,
+                    vx: (Math.random() - 0.5) * 6,
+                    vy: (Math.random() - 0.5) * 6,
                     life: 1,
                     color: color,
-                    size: Math.random() * 3 + 1
-                });
-            }
-        }
-
-        function createDustParticles() {
-            for (let i = 0; i < 2; i++) {
-                particles.push({
-                    x: platform.x + Math.random() * platform.width,
-                    y: platform.y + platform.height,
-                    vx: (Math.random() - 0.5) * 2,
-                    vy: Math.random() * 2 + 1,
-                    life: 1,
-                    color: '#CCCCCC',
                     size: Math.random() * 2 + 1
                 });
             }
         }
 
+        function createDustParticles() {
+            if (particles.length >= config.MAX_PARTICLES) return;
+            
+            particles.push({
+                x: platform.x + Math.random() * platform.width,
+                y: platform.y + platform.height,
+                vx: (Math.random() - 0.5) * 2,
+                vy: Math.random() * 2 + 1,
+                life: 1,
+                color: '#CCCCCC',
+                size: Math.random() * 2 + 1
+            });
+        }
+
         function createTeleportParticles(x, y) {
-            for (let i = 0; i < 15; i++) {
+            if (particles.length >= config.MAX_PARTICLES) return;
+            
+            for (let i = 0; i < 8; i++) {
                 particles.push({
-                    x: x,
-                    y: y,
-                    vx: (Math.random() - 0.5) * 6,
-                    vy: (Math.random() - 0.5) * 6,
+                    x: x, y: y,
+                    vx: (Math.random() - 0.5) * 4,
+                    vy: (Math.random() - 0.5) * 4,
                     life: 1,
                     color: '#9C27B0',
-                    size: Math.random() * 4 + 2
+                    size: Math.random() * 3 + 1
                 });
             }
         }
@@ -1119,7 +701,7 @@
             particles.forEach((particle, index) => {
                 particle.x += particle.vx * (deltaTime / 16);
                 particle.y += particle.vy * (deltaTime / 16);
-                particle.life -= 0.02 * (deltaTime / 16);
+                particle.life -= 0.03;
                 
                 if (particle.life <= 0) {
                     particles.splice(index, 1);
@@ -1127,55 +709,15 @@
             });
         }
 
-        function updateBombs() {
-            bombs.forEach(bomb => {
-                bomb.pulsePhase += 0.05;
-                if (bomb.pulsePhase > Math.PI * 2) {
-                    bomb.pulsePhase -= Math.PI * 2;
-                }
-            });
-        }
-
-        function updatePowerups() {
-            const now = Date.now();
-            Object.keys(activePowerups).forEach(type => {
-                if (now > activePowerups[type].expires) {
-                    deactivatePowerup(type);
-                    delete activePowerups[type];
-                }
-            });
+        function updatePlatformPosition() {
+            const lift = Math.min(HEIGHT * 0.3, Math.floor(score / 50) * (HEIGHT * 0.03));
+            platform.y = originalPlatformY - lift;
         }
 
         function activatePowerup(type) {
-            const now = Date.now();
-            const duration = config.POWERUP_DURATION;
-            
-            if (activePowerups[type]) {
-                activePowerups[type].expires = now + duration;
-                activePowerups[type].count = (activePowerups[type].count || 1) + 1;
-            } else {
-                activePowerups[type] = {
-                    expires: now + duration,
-                    count: 1
-                };
-                
-                applyPowerupEffect(type);
-            }
-            
-            setTimeout(() => {
-                if (activePowerups[type] && now + duration <= activePowerups[type].expires) {
-                    deactivatePowerup(type);
-                    delete activePowerups[type];
-                }
-            }, duration);
-        }
-
-        function applyPowerupEffect(type) {
-            const maxPlatformWidth = WIDTH * 0.4;
-            
             switch(type) {
                 case 'expand':
-                    platform.width = Math.min(maxPlatformWidth, platform.width * 1.5);
+                    platform.width = Math.min(WIDTH * 0.4, platform.width * 1.5);
                     break;
                 case 'shrink':
                     platform.width = Math.max(WIDTH * 0.1, platform.width * 0.7);
@@ -1193,80 +735,39 @@
                     });
                     break;
                 case 'multi':
-                    if (balls.length < 5) {
-                        for (let i = 0; i < 2 && balls.length < 5; i++) {
-                            const newBall = {...balls[0]};
-                            newBall.dx = -newBall.dx * (0.8 + Math.random() * 0.4);
-                            newBall.color = ballColors[(currentBallColorIndex + 1) % ballColors.length];
-                            newBall.trail = [];
-                            balls.push(newBall);
-                        }
+                    if (balls.length < config.MAX_BALLS) {
+                        const newBall = {...balls[0]};
+                        newBall.dx = -newBall.dx;
+                        newBall.trail = [];
+                        balls.push(newBall);
                     }
                     break;
             }
         }
 
-        function deactivatePowerup(type) {
-            const basePlatformWidth = Math.min(150, WIDTH * 0.2);
-            
-            switch(type) {
-                case 'expand':
-                case 'shrink':
-                    platform.width = Math.min(WIDTH * 0.4, basePlatformWidth * (1 + 0.001 * score));
-                    break;
-                case 'slow':
-                case 'fast':
-                    const currentSpeed = getBallSpeed(currentLevel);
-                    balls.forEach(ball => {
-                        const speed = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
-                        ball.dx = (ball.dx / speed) * currentSpeed;
-                        ball.dy = (ball.dy / speed) * currentSpeed;
-                    });
-                    break;
-            }
-        }
-
-        function playHitSound() {
-            if (sounds.hit) {
-                sounds.hit.currentTime = 0;
-                sounds.hit.play().catch(e => console.log("Не удалось воспроизвести звук"));
-            }
-        }
-
-        function playBombSound() {
-            if (sounds.bomb) {
-                sounds.bomb.currentTime = 0;
-                sounds.bomb.play().catch(e => console.log("Не удалось воспроизвести звук взрыва"));
-            }
-        }
-
-        function playBackgroundMusic() {
-            if (sounds.music) {
-                sounds.music.play().catch(e => console.log("Не удалось воспроизвести музыку"));
-            }
-        }
-
         function render() {
+            // Очистка
             ctx.clearRect(0, 0, WIDTH, HEIGHT);
             
+            // Фон
             drawBackground();
+            
+            // Объекты
             drawParticles();
             drawPortals();
-            drawPlatform();
             drawBalls();
+            drawPlatform();
             drawPowerups();
             drawBombs();
         }
 
         function drawBackground() {
-            const theme = config.LEVEL_SETTINGS[currentLevel].theme;
-            const colors = THEME_COLORS[theme] || THEME_COLORS.air;
+            const theme = config.LEVEL_SETTINGS[currentLevel].theme || 'air';
+            const colors = THEME_COLORS[theme];
             
-            // Плавный градиентный фон
             const gradient = ctx.createLinearGradient(0, 0, WIDTH, HEIGHT);
             gradient.addColorStop(0, colors[0]);
-            gradient.addColorStop(0.5, colors[1]);
-            gradient.addColorStop(1, colors[2]);
+            gradient.addColorStop(1, colors[1]);
             
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, WIDTH, HEIGHT);
@@ -1289,14 +790,12 @@
                 ctx.translate(portal.x, portal.y);
                 ctx.rotate(portal.rotation);
                 
-                // Внешний круг портала
                 ctx.strokeStyle = '#9C27B0';
                 ctx.lineWidth = 3;
                 ctx.beginPath();
                 ctx.arc(0, 0, portal.size / 2, 0, Math.PI * 2);
                 ctx.stroke();
                 
-                // Внутренний круг
                 ctx.fillStyle = 'rgba(156, 39, 176, 0.3)';
                 ctx.beginPath();
                 ctx.arc(0, 0, portal.size / 3, 0, Math.PI * 2);
@@ -1306,128 +805,79 @@
             });
         }
 
-        function drawPlatform() {
-            ctx.fillStyle = platform.color;
-            ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
-            
-            ctx.fillStyle = '#DB7093';
-            ctx.fillRect(platform.x, platform.y + platform.height - 3, platform.width, 3);
-            
-            ctx.fillStyle = '#FFFFFF';
-            ctx.fillRect(platform.x, platform.y, platform.width, 2);
-        }
-
         function drawBalls() {
             balls.forEach(ball => {
-                // Рисуем след
+                // След
                 ball.trail.forEach((point, index) => {
-                    const alpha = index / ball.trail.length * 0.5;
+                    const alpha = index / ball.trail.length * 0.3;
                     ctx.globalAlpha = alpha;
                     ctx.fillStyle = ball.color;
                     ctx.beginPath();
-                    ctx.arc(point.x, point.y, ball.radius * 0.7, 0, Math.PI * 2);
+                    ctx.arc(point.x, point.y, ball.radius * 0.5, 0, Math.PI * 2);
                     ctx.fill();
                 });
                 ctx.globalAlpha = 1;
                 
-                // Рисуем мяч
-                ctx.fillStyle = ball.type === 'ghost' && ball.ghost ? 
-                    `rgba(${parseInt(ball.color.slice(1,3),16)},${parseInt(ball.color.slice(3,5),16)},${parseInt(ball.color.slice(5,7),16)},0.5)` : 
-                    ball.color;
+                // Мяч
+                ctx.fillStyle = ball.color;
                 ctx.beginPath();
                 ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
                 ctx.fill();
-
-                // Блики на мяче
-                ctx.fillStyle = '#E0FFFF';
-                ctx.beginPath();
-                ctx.arc(ball.x - ball.radius/3, ball.y - ball.radius/3, ball.radius/2, 0, Math.PI * 2);
-                ctx.fill();
-                
-                // Индикатор типа мяча
-                if (ball.type !== 'normal') {
-                    ctx.fillStyle = '#FFFFFF';
-                    ctx.font = `bold ${ball.radius}px Arial`;
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    
-                    let symbol = '●';
-                    switch(ball.type) {
-                        case 'sticky': symbol = 'S'; break;
-                        case 'split': symbol = 'D'; break;
-                        case 'magnetic': symbol = 'M'; break;
-                        case 'ghost': symbol = 'G'; break;
-                    }
-                    
-                    ctx.fillText(symbol, ball.x, ball.y);
-                }
             });
         }
 
-        function drawPowerup(powerup) {
-            ctx.fillStyle = powerup.color;
-            ctx.fillRect(powerup.x, powerup.y, powerup.size, powerup.size);
-            
-            ctx.strokeStyle = '#FFFFFF';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(powerup.x, powerup.y, powerup.size, powerup.size);
-            
-            ctx.fillStyle = '#FFFFFF';
-            const fontSize = Math.max(12, powerup.size * 0.6);
-            ctx.font = `bold ${fontSize}px Arial`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            
-            const symbol = POWERUP_SYMBOLS[powerup.type] || '?';
-            ctx.fillText(symbol, powerup.x + powerup.size/2, powerup.y + powerup.size/2);
+        function drawPlatform() {
+            ctx.fillStyle = platform.color;
+            ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
         }
 
-        function drawBomb(bomb) {
-            const pulseScale = 1 + 0.1 * Math.sin(bomb.pulsePhase);
-            const currentSize = bomb.size * pulseScale;
-            
-            ctx.fillStyle = bomb.color;
-            ctx.beginPath();
-            ctx.arc(bomb.x + bomb.size/2, bomb.y + bomb.size/2, currentSize/2, 0, Math.PI * 2);
-            ctx.fill();
-            
-            ctx.strokeStyle = '#FF0000';
-            ctx.lineWidth = 2;
-            for (let i = 0; i < 8; i++) {
-                const angle = (i / 8) * Math.PI * 2;
-                const spikeLength = currentSize * 0.3;
-                const startX = bomb.x + bomb.size/2 + Math.cos(angle) * (currentSize/2);
-                const startY = bomb.y + bomb.size/2 + Math.sin(angle) * (currentSize/2);
-                const endX = bomb.x + bomb.size/2 + Math.cos(angle) * (currentSize/2 + spikeLength);
-                const endY = bomb.y + bomb.size/2 + Math.sin(angle) * (currentSize/2 + spikeLength);
+        function drawPowerups() {
+            powerups.forEach(powerup => {
+                ctx.fillStyle = POWERUP_COLORS[powerup.type];
+                ctx.fillRect(powerup.x, powerup.y, powerup.size, powerup.size);
                 
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = 'bold 16px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(POWERUP_SYMBOLS[powerup.type], powerup.x + powerup.size/2, powerup.y + powerup.size/2);
+            });
+        }
+
+        function drawBombs() {
+            bombs.forEach(bomb => {
+                ctx.fillStyle = '#F44336';
                 ctx.beginPath();
-                ctx.moveTo(startX, startY);
-                ctx.lineTo(endX, endY);
-                ctx.stroke();
-            }
-            
-            ctx.fillStyle = '#FFFFFF';
-            const fontSize = Math.max(12, currentSize * 0.4);
-            ctx.font = `bold ${fontSize}px Arial`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('!', bomb.x + bomb.size/2, bomb.y + bomb.size/2);
-            
-            ctx.shadowColor = '#FF0000';
-            ctx.shadowBlur = 15;
-            ctx.beginPath();
-            ctx.arc(bomb.x + bomb.size/2, bomb.y + bomb.size/2, currentSize/2, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.shadowBlur = 0;
+                ctx.arc(bomb.x + bomb.size/2, bomb.y + bomb.size/2, bomb.size/2, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('!', bomb.x + bomb.size/2, bomb.y + bomb.size/2);
+            });
         }
 
         function updateUI() {
             document.getElementById('score').textContent = score;
         }
 
+        function showLevelUp(newLevel) {
+            const levelUp = document.getElementById('levelUp');
+            document.getElementById('levelNumber').textContent = newLevel;
+            levelUp.style.display = 'block';
+            setTimeout(() => levelUp.style.display = 'none', 1500);
+        }
+
+        function playHitSound() {
+            // Заглушка для звука
+        }
+
         function endGame() {
             gameOver = true;
+            cancelAnimationFrame(animationId);
+            
             document.getElementById('finalScore').textContent = score;
             document.getElementById('finalLevel').textContent = currentLevel;
             document.getElementById('gameOver').style.display = 'flex';
@@ -1436,30 +886,61 @@
             checkNewHighScore();
         }
 
+        function resumeGame() {
+            isPaused = false;
+            document.getElementById('pauseScreen').style.display = 'none';
+            gameLoop();
+        }
+
         function restartGame() {
             document.getElementById('gameOver').style.display = 'none';
             document.getElementById('pauseScreen').style.display = 'none';
             document.getElementById('newHighScore').style.display = 'none';
-            isPaused = false;
             resetGame();
-            if (gameStarted) {
-                requestAnimationFrame(gameLoop);
+            gameLoop();
+        }
+
+        // Система рекордов
+        function loadHighScores() {
+            const saved = localStorage.getItem('highScores');
+            highScores = saved ? JSON.parse(saved) : [
+                { name: "КИС", score: 100 }, { name: "МУР", score: 75 }, { name: "ПУХ", score: 50 }
+            ];
+        }
+
+        function saveHighScores() {
+            localStorage.setItem('highScores', JSON.stringify(highScores));
+        }
+
+        function updateHighScoresDisplay() {
+            const list = document.getElementById('highScoresList');
+            list.innerHTML = highScores.slice(0, 5).map(s => `${s.name}: ${s.score}`).join('<br>');
+        }
+
+        function checkNewHighScore() {
+            if (highScores.length < 5 || score > highScores[highScores.length - 1].score) {
+                document.getElementById('newHighScore').style.display = 'block';
             }
+        }
+
+        function saveHighScore() {
+            const initials = document.getElementById('initialsInput').value.toUpperCase().substr(0, 3) || 'КИС';
+            highScores.push({ name: initials, score: score });
+            highScores.sort((a, b) => b.score - a.score);
+            highScores = highScores.slice(0, 5);
+            saveHighScores();
+            updateHighScoresDisplay();
+            document.getElementById('newHighScore').style.display = 'none';
         }
 
         function closeGame() {
             if (window.Telegram && Telegram.WebApp) {
                 Telegram.WebApp.close();
-            } else {
-                document.getElementById('gameOver').style.display = 'none';
-                document.getElementById('pauseScreen').style.display = 'none';
             }
         }
 
-        // Запуск игры при загрузке
+        // Запуск
         window.onload = init;
-
-        // Инициализация Telegram Web App
         if (window.Telegram && Telegram.WebApp) {
             Telegram.WebApp.ready();
             Telegram.WebApp.expand();
