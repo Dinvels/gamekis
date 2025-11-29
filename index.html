@@ -2,9 +2,8 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Поймай мячик! - Кис! v1.1</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         * {
             margin: 0;
@@ -216,7 +215,7 @@
     </div>
 
     <script>
-            // ВЕРСИЯ 1.1 - С улучшениями для Telegram
+        // ВЕРСИЯ 1.1 - С улучшениями
         const config = {
             LEVEL_SETTINGS: {
                 1: { speed: 7.0, bouncesNeeded: 15 },
@@ -228,7 +227,7 @@
             POWERUP_CHANCE: 0.2,
             POWERUP_DURATION: 5000,
             BOMB_CHANCE: 0.08,
-            MAX_PARTICLES: 20 // Уменьшено для оптимизации
+            MAX_PARTICLES: 30
         };
 
         // Игровые переменные
@@ -247,7 +246,7 @@
         const platformColors = ['#FFB6C1', '#ADD8E6', '#98FB98', '#DDA0DD', '#F0E68C'];
         const ballColors = ['#ADD8E6', '#FFB6C1', '#98FB98', '#DDA0DD', '#F0E68C'];
         const POWERUP_COLORS = {
-            expand: '#4CAF50', shrink: '#F44336', slow: '#4CAF50',
+            expand: '#4CAF50', shrink: '#F44336', slow: '#4CAF50', 
             fast: '#F44336', multi: '#4CAF50', bomb: '#F44336'
         };
         const POWERUP_SYMBOLS = {
@@ -262,12 +261,6 @@
             setupCanvasSize();
             setupControls();
             
-            // Инициализация Telegram WebApp
-            if (window.Telegram && Telegram.WebApp) {
-                Telegram.WebApp.ready();
-                Telegram.WebApp.expand();
-            }
-            
             document.getElementById('startScreen').style.display = 'flex';
         }
 
@@ -279,10 +272,8 @@
         }
 
         function setupCanvasSize() {
-            // Используем размеры из Telegram WebApp
-            const { viewportWidth, viewportHeight } = Telegram.WebApp || {};
-            WIDTH = viewportWidth || window.innerWidth;
-            HEIGHT = viewportHeight || window.innerHeight;
+            WIDTH = window.innerWidth;
+            HEIGHT = window.innerHeight;
             canvas.width = WIDTH;
             canvas.height = HEIGHT;
         }
@@ -374,7 +365,7 @@
 
         function gameLoop(timestamp) {
             if (!lastTime) lastTime = timestamp;
-            const deltaTime = Math.min(timestamp - lastTime, 1000/30); // Ограничение FPS
+            const deltaTime = Math.min(timestamp - lastTime, 1000/30);
             lastTime = timestamp;
 
             if (!gameOver && !isPaused && gameStarted) {
@@ -404,6 +395,7 @@
         }
 
         function updatePlatform(deltaTime) {
+            // Плавное управление с физикой
             const acceleration = 0.001 * deltaTime;
             const friction = 0.92;
             
@@ -416,13 +408,14 @@
             platform.x += platformVelocity * deltaTime;
             platform.x = Math.max(0, Math.min(WIDTH - platform.width, platform.x));
             
-            
+            // Пыль при движении
             if (Math.abs(platformVelocity) > 0.1 && particles.length < config.MAX_PARTICLES) {
                 createDustParticles();
             }
         }
 
         function updateBalls(deltaTime) {
+            // Обновляем следы мячей
             balls.forEach(ball => {
                 ball.trail.push({x: ball.x, y: ball.y});
                 if (ball.trail.length > 8) ball.trail.shift();
@@ -431,313 +424,413 @@
             balls.forEach(ball => {
                 ball.x += ball.dx * (deltaTime / 16);
                 ball.y += ball.dy * (deltaTime / 16);
-                  // Отскок от стенок
-                if (ball.x - ball.radius < 0) {
-                    ball.x = ball.radius;
+
+                // Столкновение со стенами
+                if (ball.x - ball.radius <= 0 || ball.x + ball.radius >= WIDTH) {
                     ball.dx = -ball.dx;
-                } else if (ball.x + ball.radius > WIDTH) {
-                    ball.x = WIDTH - ball.radius;
-                    ball.dx = -ball.dx;
+                    ball.x = Math.max(ball.radius, Math.min(WIDTH - ball.radius, ball.x));
+                    createCollisionParticles(ball.x, ball.y, ball.color);
                 }
 
-                // Отскок от верхней границы
-                if (ball.y - ball.radius < 0) {
-                    ball.y = ball.radius;
+                if (ball.y - ball.radius <= 0) {
                     ball.dy = -ball.dy;
-                }
-
-                // Падение вниз
-                if (ball.y + ball.radius > HEIGHT) {
-                    balls.splice(balls.indexOf(ball), 1);
+                    ball.y = ball.radius;
+                    createCollisionParticles(ball.x, ball.y, ball.color);
                 }
 
                 // Столкновение с платформой
-                if (
-                    ball.y + ball.radius >= platform.y &&
-                    ball.y <= platform.y + platform.height &&
-                    ball.x >= platform.x &&
-                    ball.x <= platform.x + platform.width
-                ) {
-                    const relativeX = (ball.x - platform.x) / platform.width;
-                    ball.dy = -Math.abs(ball.dy);
-                    ball.dx += platformVelocity * 0.2;
-                    bouncesInCurrentLevel++;
-                    score++;
-                    updateUI();
-
-                    if (bouncesInCurrentLevel >= config.LEVEL_SETTINGS[currentLevel].bouncesNeeded) {
-                        nextLevel();
-                    }
+                if (ball.y + ball.radius >= platform.y && 
+                    ball.y - ball.radius <= platform.y + platform.height &&
+                    ball.x >= platform.x && 
+                    ball.x <= platform.x + platform.width) {
+                    handlePlatformCollision(ball);
                 }
             });
+
+            // Проверка столкновений между мячами
+            checkBallCollisions();
+        }
+
+        function checkBallCollisions() {
+            for (let i = 0; i < balls.length; i++) {
+                for (let j = i + 1; j < balls.length; j++) {
+                    const ball1 = balls[i];
+                    const ball2 = balls[j];
+                    
+                    const dx = ball2.x - ball1.x;
+                    const dy = ball2.y - ball1.y;
+                    const distance = Math.sqrt(dx*dx + dy*dy);
+                    
+                    if (distance < ball1.radius + ball2.radius) {
+                        handleBallCollision(ball1, ball2);
+                        createCollisionParticles(
+                            (ball1.x + ball2.x) / 2, 
+                            (ball1.y + ball2.y) / 2,
+                            ball1.color
+                        );
+                    }
+                }
+            }
+        }
+
+        function handleBallCollision(ball1, ball2) {
+            const dx = ball2.x - ball1.x;
+            const dy = ball2.y - ball1.y;
+            const distance = Math.sqrt(dx*dx + dy*dy);
+            
+            // Вектор нормали
+            const nx = dx / distance;
+            const ny = dy / distance;
+            
+            // Относительная скорость
+            const dvx = ball2.dx - ball1.dx;
+            const dvy = ball2.dy - ball1.dy;
+            const speed = dvx * nx + dvy * ny;
+            
+            // Мячи не сталкиваются, если удаляются друг от друга
+            if (speed > 0) return;
+            
+            // Импульс столкновения
+            const impulse = 1.8 * speed / (1/ball1.radius + 1/ball2.radius);
+            
+            // Изменение скоростей
+            ball1.dx += impulse * nx / ball1.radius;
+            ball1.dy += impulse * ny / ball1.radius;
+            ball2.dx -= impulse * nx / ball2.radius;
+            ball2.dy -= impulse * ny / ball2.radius;
+            
+            // Разделение мячей
+            const overlap = (ball1.radius + ball2.radius - distance) / 2;
+            ball1.x -= overlap * nx;
+            ball1.y -= overlap * ny;
+            ball2.x += overlap * nx;
+            ball2.y += overlap * ny;
+        }
+
+        function handlePlatformCollision(ball) {
+            const relativeX = (platform.x + platform.width / 2) - ball.x;
+            const normalizedX = relativeX / (platform.width / 2);
+            const bounceAngle = normalizedX * (Math.PI / 3);
+
+            const speed = config.LEVEL_SETTINGS[currentLevel].speed * (WIDTH / 800);
+            
+            ball.dx = -speed * Math.sin(bounceAngle);
+            ball.dy = -Math.abs(speed * Math.cos(bounceAngle));
+
+            score++;
+            bouncesInCurrentLevel++;
+
+            if (bouncesInCurrentLevel >= config.LEVEL_SETTINGS[currentLevel].bouncesNeeded) {
+                if (currentLevel < Object.keys(config.LEVEL_SETTINGS).length) {
+                    levelUp();
+                }
+            }
+
+            // Смена цветов
+            platform.color = platformColors[score % platformColors.length];
+            ball.color = ballColors[score % ballColors.length];
+
+            updateUI();
+        }
+
+        function levelUp() {
+            showLevelUp(currentLevel + 1);
+            currentLevel++;
+            bouncesInCurrentLevel = 0;
+        }
+
+        function createPowerup() {
+            const size = Math.max(15, WIDTH * 0.03);
+            const types = ["expand", "shrink", "slow", "fast", "multi", "bomb"];
+            const type = Math.random() < config.BOMB_CHANCE ? "bomb" : types[Math.floor(Math.random() * 5)];
+            
+            if (type === "bomb") {
+                bombs.push({
+                    x: Math.random() * (WIDTH - size * 2) + size,
+                    y: 0,
+                    type: type,
+                    speed: 3,
+                    size: size
+                });
+            } else {
+                powerups.push({
+                    x: Math.random() * (WIDTH - size * 2) + size,
+                    y: 0,
+                    type: type,
+                    speed: 2,
+                    size: size
+                });
+            }
         }
 
         function updatePowerups() {
-            powerups.forEach(powerup => {
-                powerup.y += powerup.speed * (lastTime - powerup.spawnTime) / 1000;
-                
+            powerups.forEach((powerup, index) => {
+                powerup.y += powerup.speed;
                 if (powerup.y > HEIGHT) {
-                    powerups.splice(powerups.indexOf(powerup), 1);
-                }
-
-                const dist = Math.hypot(
-                    platform.x + platform.width / 2 - powerup.x,
-                    platform.y - powerup.y
-                );
-                if (dist < platform.width / 2 + 15) {
-                    applyPowerup(powerup);
-                    powerups.splice(powerups.indexOf(powerup), 1);
+                    powerups.splice(index, 1);
+                } else if (powerup.y + powerup.size >= platform.y && 
+                          powerup.x >= platform.x && 
+                          powerup.x <= platform.x + platform.width) {
+                    activatePowerup(powerup.type);
+                    powerups.splice(index, 1);
                 }
             });
-        }
 
-        function updateBombs() {
-            bombs.forEach(bomb => {
-                bomb.y += bomb.speed * (lastTime - bomb.spawnTime) / 1000;
+            bombs.forEach((bomb, index) => {
+                bomb.y += bomb.speed;
                 if (bomb.y > HEIGHT) {
-                    bombs.splice(bombs.indexOf(bomb), 1);
-                }
-
-                const dist = Math.hypot(
-                    platform.x + platform.width / 2 - bomb.x,
-                    platform.y - bomb.y
-                );
-                if (dist < platform.width / 2 + 15) {
+                    bombs.splice(index, 1);
+                } else if (bomb.y + bomb.size >= platform.y && 
+                          bomb.x >= platform.x && 
+                          bomb.x <= platform.x + platform.width) {
                     endGame();
                 }
             });
         }
 
-        function updateParticles(deltaTime) {
-            particles.forEach(particle => {
-                particle.life -= deltaTime;
-                particle.x += particle.vx * deltaTime / 16;
-                particle.y += particle.vy * deltaTime / 16;
-            });
-            particles = particles.filter(p => p.life > 0);
-        }
-
-        function createPowerup() {
-            const x = Math.random() * (WIDTH - 40) + 20;
-            const type = Object.keys(POWERUP_COLORS)[Math.floor(Math.random() * Object.keys(POWERUP_COLORS).length)];
-            powerups.push({
-                x: x,
-                y: 0,
-                type: type,
-                speed: 2,
-                spawnTime: lastTime,
-                color: POWERUP_COLORS[type],
-                symbol: POWERUP_SYMBOLS[type]
-            });
-        }
-
-        function applyPowerup(powerup) {
-            switch (powerup.type) {
-                case 'expand':
-                    platform.width = Math.min(platform.width * 1.5, WIDTH * 0.4);
-                    break;
-                case 'shrink':
-                    platform.width = Math.max(platform.width * 0.7, 50);
-                    break;
-                case 'slow':
-                    balls.forEach(b => { b.dx *= 0.7; b.dy *= 0.7; });
-                    break;
-                case 'fast':
-                    balls.forEach(b => { b.dx *= 1.3; b.dy *= 1.3; });
-                    break;
-                case 'multi':
-                    balls.push({...balls[0]});
-                    break;
-                case 'bomb':
-                    createBomb();
-                    break;
+        function createCollisionParticles(x, y, color) {
+            if (particles.length >= config.MAX_PARTICLES) return;
+            
+            for (let i = 0; i < 5; i++) {
+                particles.push({
+                    x: x, y: y,
+                    vx: (Math.random() - 0.5) * 8,
+                    vy: (Math.random() - 0.5) * 8,
+                    life: 1,
+                    color: color,
+                    size: Math.random() * 3 + 1
+                });
             }
-        }
-
-        function createBomb() {
-            const x = Math.random() * (WIDTH - 40) + 20;
-            bombs.push({
-                x: x,
-                y: 0,
-                speed: 3,
-                spawnTime: lastTime
-            });
         }
 
         function createDustParticles() {
-            for (let i = 0; i < 3; i++) {
-                particles.push({
-                    x: platform.x + Math.random() * platform.width,
-                    y: platform.y,
-                    vx: Math.random() * 2 - 1,
-                    vy: -Math.random(),
-                    life: 500,
-                    color: platform.color
-                });
-            }
+            if (particles.length >= config.MAX_PARTICLES) return;
+            
+            particles.push({
+                x: platform.x + Math.random() * platform.width,
+                y: platform.y + platform.height,
+                vx: (Math.random() - 0.5) * 3,
+                vy: Math.random() * 2 + 1,
+                life: 1,
+                color: '#CCCCCC',
+                size: Math.random() * 2 + 1
+            });
         }
 
-        function nextLevel() {
-            currentLevel++;
-            bouncesInCurrentLevel = 0;
-            document.getElementById('levelUp').style.display = 'block';
-            document.getElementById('levelNumber').textContent = currentLevel;
-
-            setTimeout(() => {
-                document.getElementById('levelUp').style.display = 'none';
-            }, 2000);
-
-            if (currentLevel > Object.keys(config.LEVEL_SETTINGS).length) {
-                endGame(true);
-            } else {
-                balls.forEach(ball => {
-                    ball.dx *= 1.1;
-                    ball.dy *= 1.1;
-                });
-            }
-        }
-
-        function endGame(won = false) {
-            gameOver = true;
-            document.getElementById('gameOver').style.display = 'flex';
-            document.getElementById('finalScore').textContent = score;
-            document.getElementById('finalLevel').textContent = currentLevel;
-
-            if (won) {
-                document.querySelector('#gameOver h2').textContent = 'ПОБЕДА, КИС! 🎉';
-            }
-
-            checkHighScore();
-        }
-
-        function checkHighScore() {
-            const newScore = { name: 'КИС', score: score };
-            highScores.push(newScore);
-            highScores.sort((a, b) => b.score - a.score);
-            highScores = highScores.slice(0, 5);
-
-            saveHighScores();
-
-            const highScoresHTML = highScores
-                .map(s => `<div>${s.name}: ${s.score}</div>`)
-                .join('');
-            document.getElementById('highScoresList').innerHTML = highScoresHTML;
-
-            if (highScores[0].score === score) {
-                document.getElementById('newHighScore').style.display = 'block';
-            }
-        }
-
-        function saveHighScore() {
-            const initials = document.getElementById('initialsInput').value.toUpperCase();
-            if (initials.length === 3) {
-                highScores[0].name = initials;
-                saveHighScores();
-                document.getElementById('newHighScore').style.display = 'none';
-                checkHighScore();
-            }
-        }
-
-        function saveHighScores() {
-            try {
-                if (typeof localStorage !== 'undefined') {
-                    localStorage.setItem('highScores', JSON.stringify(highScores));
+        function updateParticles(deltaTime) {
+            particles.forEach((particle, index) => {
+                particle.x += particle.vx * (deltaTime / 16);
+                particle.y += particle.vy * (deltaTime / 16);
+                particle.life -= 0.03;
+                
+                if (particle.life <= 0) {
+                    particles.splice(index, 1);
                 }
-            } catch (e) {
-                console.warn('Не удалось сохранить рекорды:', e);
+            });
+        }
+
+        function updatePlatformPosition() {
+            const lift = Math.min(HEIGHT * 0.3, Math.floor(score / 50) * (HEIGHT * 0.03));
+            platform.y = originalPlatformY - lift;
+        }
+
+        function activatePowerup(type) {
+            switch(type) {
+                case 'expand':
+                    platform.width = Math.min(WIDTH * 0.4, platform.width * 1.5);
+                    break;
+                case 'shrink':
+                    platform.width = Math.max(WIDTH * 0.1, platform.width * 0.7);
+                    break;
+                case 'slow':
+                    balls.forEach(ball => {
+                        ball.dx *= 0.7;
+                        ball.dy *= 0.7;
+                    });
+                    break;
+                case 'fast':
+                    balls.forEach(ball => {
+                        ball.dx *= 1.3;
+                        ball.dy *= 1.3;
+                    });
+                    break;
+                case 'multi':
+                    if (balls.length < 5) {
+                        const newBall = {...balls[0]};
+                        newBall.dx = -newBall.dx * (0.8 + Math.random() * 0.4);
+                        newBall.trail = [];
+                        balls.push(newBall);
+                    }
+                    break;
             }
         }
 
-        function loadHighScores() {
-            try {
-                if (typeof localStorage !== 'undefined') {
-                    const saved = localStorage.getItem('highScores');
-                    highScores = saved ? JSON.parse(saved) : [];
-                } else {
-                    highScores = [{ name: 'КИС', score: 100 }];
-                }
-                            document.getElementById('highScoresList').innerHTML = highScoresHTML;
+        function render() {
+            ctx.clearRect(0, 0, WIDTH, HEIGHT);
+            
+            // Градиентный фон
+            const gradient = ctx.createLinearGradient(0, 0, WIDTH, HEIGHT);
+            gradient.addColorStop(0, '#1e3799');
+            gradient.addColorStop(1, '#0c2461');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, WIDTH, HEIGHT);
+            
+            drawParticles();
+            drawBalls();
+            drawPlatform();
+            drawPowerups();
+            drawBombs();
+        }
+
+        function drawParticles() {
+            particles.forEach(particle => {
+                ctx.globalAlpha = particle.life;
+                ctx.fillStyle = particle.color;
+                ctx.beginPath();
+                ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+        }
+
+        function drawBalls() {
+            balls.forEach(ball => {
+                // Рисуем след
+                ball.trail.forEach((point, index) => {
+                    const alpha = index / ball.trail.length * 0.3;
+                    ctx.globalAlpha = alpha;
+                    ctx.fillStyle = ball.color;
+                    ctx.beginPath();
+                    ctx.arc(point.x, point.y, ball.radius * 0.5, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+                ctx.globalAlpha = 1;
+                
+                // Рисуем мяч
+                ctx.fillStyle = ball.color;
+                ctx.beginPath();
+                ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        function drawPlatform() {
+            ctx.fillStyle = platform.color;
+            ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+            
+            // Детали платформы
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(platform.x, platform.y, platform.width, 2);
+        }
+
+        function drawPowerups() {
+            powerups.forEach(powerup => {
+                ctx.fillStyle = POWERUP_COLORS[powerup.type];
+                ctx.fillRect(powerup.x, powerup.y, powerup.size, powerup.size);
+                
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = 'bold 16px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(POWERUP_SYMBOLS[powerup.type], powerup.x + powerup.size/2, powerup.y + powerup.size/2);
+            });
+        }
+
+        function drawBombs() {
+            bombs.forEach(bomb => {
+                // Пульсация бомбы
+                const pulse = 1 + 0.1 * Math.sin(Date.now() * 0.01);
+                const currentSize = bomb.size * pulse;
+                
+                ctx.fillStyle = '#F44336';
+                ctx.beginPath();
+                ctx.arc(bomb.x + bomb.size/2, bomb.y + bomb.size/2, currentSize/2, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('!', bomb.x + bomb.size/2, bomb.y + bomb.size/2);
+            });
         }
 
         function updateUI() {
             document.getElementById('score').textContent = score;
         }
 
-        function render() {
-            ctx.clearRect(0, 0, WIDTH, HEIGHT);
+        function showLevelUp(newLevel) {
+            const levelUp = document.getElementById('levelUp');
+            document.getElementById('levelNumber').textContent = newLevel;
+            levelUp.style.display = 'block';
+            setTimeout(() => levelUp.style.display = 'none', 1500);
+        }
 
-            // Рисуем платформу
-            ctx.fillStyle = platform.color;
-            ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+        function endGame() {
+            gameOver = true;
+            document.getElementById('finalScore').textContent = score;
+            document.getElementById('finalLevel').textContent = currentLevel;
+            document.getElementById('gameOver').style.display = 'flex';
+            
+            updateHighScoresDisplay();
+            checkNewHighScore();
+        }
 
+        function resumeGame() {
+            isPaused = false;
+            document.getElementById('pauseScreen').style.display = 'none';
+            requestAnimationFrame(gameLoop);
+        }
 
-            // Рисуем мячи
-            balls.forEach(ball => {
-                ctx.fillStyle = ball.color;
-                ctx.beginPath();
-                ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-                ctx.fill();
+        function restartGame() {
+            document.getElementById('gameOver').style.display = 'none';
+            document.getElementById('pauseScreen').style.display = 'none';
+            document.getElementById('newHighScore').style.display = 'none';
+            resetGame();
+            requestAnimationFrame(gameLoop);
+        }
 
-                // Рисуем след
-                ctx.globalAlpha = 0.3;
-                for (let i = 0; i < ball.trail.length; i++) {
-                    const pos = ball.trail[i];
-                    ctx.beginPath();
-                    ctx.arc(pos.x, pos.y, ball.radius * (1 - i / ball.trail.length), 0, Math.PI * 2);
-                    ctx.fill();
-                }
-                ctx.globalAlpha = 1.0;
-            });
+        // Система рекордов
+        function loadHighScores() {
+            const saved = localStorage.getItem('highScores');
+            highScores = saved ? JSON.parse(saved) : [
+                { name: "КИС", score: 100 }, { name: "МУР", score: 75 }, { name: "ПУХ", score: 50 }
+            ];
+        }
 
-            // Рисуем бонусы
-            powerups.forEach(powerup => {
-                ctx.fillStyle = powerup.color;
-                ctx.font = '20px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText(powerup.symbol, powerup.x, powerup.y);
-            });
+        function saveHighScores() {
+            localStorage.setItem('highScores', JSON.stringify(highScores));
+        }
 
-            // Рисуем бомбы
-            bombs.forEach(bomb => {
-                ctx.fillStyle = '#F44336';
-                ctx.beginPath();
-                ctx.arc(bomb.x, bomb.y, 10, 0, Math.PI * 2);
-                ctx.fill();
-            });
+        function updateHighScoresDisplay() {
+            const list = document.getElementById('highScoresList');
+            list.innerHTML = highScores.slice(0, 5).map(s => `${s.name}: ${s.score}`).join('<br>');
+        }
 
-            // Рисуем частицы
-            particles.forEach(particle => {
-                ctx.fillStyle = particle.color;
-                ctx.globalAlpha = particle.life / 500;
-                ctx.beginPath();
-                ctx.arc(particle.x, particle.y, 3, 0, Math.PI * 2);
-                ctx.fill();
-            });
+        function checkNewHighScore() {
+            if (highScores.length < 5 || score > highScores[highScores.length - 1].score) {
+                document.getElementById('newHighScore').style.display = 'block';
+            }
+        }
+
+        function saveHighScore() {
+            const initials = document.getElementById('initialsInput').value.toUpperCase().substr(0, 3) || 'КИС';
+            highScores.push({ name: initials, score: score });
+            highScores.sort((a, b) => b.score - a.score);
+            highScores = highScores.slice(0, 5);
+            saveHighScores();
+            updateHighScoresDisplay();
+            document.getElementById('newHighScore').style.display = 'none';
         }
 
         function closeGame() {
             if (window.Telegram && Telegram.WebApp) {
                 Telegram.WebApp.close();
-            } else {
-                alert('Игра завершена!');
-                location.reload();
             }
         }
 
-        // Инициализация при загрузке
-        window.addEventListener('load', init);
-
-        // Обработка изменения размеров (актуально для мобильных)
-        window.addEventListener('resize', () => {
-            setupCanvasSize();
-            if (gameStarted && !gameOver && !isPaused) {
-                requestAnimationFrame(gameLoop);
-            }
-        });
-
-        // Предотвращение стандартного поведения для сенсорных событий
-        document.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
-        document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+        // Запуск
+        window.onload = init;
     </script>
 </body>
 </html>
