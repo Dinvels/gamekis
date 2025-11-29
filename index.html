@@ -165,15 +165,6 @@
             margin: 20px 0;
             font-size: 20px;
         }
-
-        #loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            font-size: 20px;
-        }
     </style>
 </head>
 <body>
@@ -224,7 +215,7 @@
     </div>
 
     <script>
-        // ВЕРСИЯ 1.1 - Оптимизированная для Telegram
+        // ВЕРСИЯ 1.1 - С улучшениями
         const config = {
             LEVEL_SETTINGS: {
                 1: { speed: 7.0, bouncesNeeded: 15 },
@@ -262,31 +253,18 @@
             expand: '+', shrink: '-', slow: '↓', fast: '↑', multi: 'x2', bomb: '!'
         };
 
-        // Тематические фоны для уровней
-        const THEME_COLORS = {
-            1: { primary: '#1e3799', secondary: '#0c2461' },
-            2: { primary: '#1e3799', secondary: '#0c2461' },
-            3: { primary: '#e55039', secondary: '#eb2f06' },
-            4: { primary: '#e55039', secondary: '#eb2f06' },
-            5: { primary: '#3c6382', secondary: '#0a3d62' }
-        };
-
         function init() {
-            console.log("Инициализация игры...");
-            
             canvas = document.getElementById('gameCanvas');
             ctx = canvas.getContext('2d');
             
-            // Быстрая инициализация без загрузки внешних ресурсов
             loadHighScores();
             setupCanvasSize();
             setupControls();
             
-            console.log("Игра готова к запуску");
+            document.getElementById('startScreen').style.display = 'flex';
         }
 
         function startGame() {
-            console.log("Запуск игры");
             document.getElementById('startScreen').style.display = 'none';
             gameStarted = true;
             resetGame();
@@ -298,13 +276,11 @@
             HEIGHT = window.innerHeight;
             canvas.width = WIDTH;
             canvas.height = HEIGHT;
-            console.log("Размер canvas:", WIDTH, "x", HEIGHT);
         }
 
         function setupControls() {
             // Плавное управление клавиатурой
             window.addEventListener('keydown', (e) => {
-                if (gameOver || isPaused || !gameStarted) return;
                 keys[e.key] = true;
                 if (e.key === ' ' || e.key === 'Escape') {
                     togglePause();
@@ -315,27 +291,20 @@
                 keys[e.key] = false;
             });
 
-            // Сенсорное управление для мобильных
+            // Сенсорное управление
             let touchStartX = 0;
-            let isMoving = false;
-            
             canvas.addEventListener('touchstart', (e) => {
                 if (isPaused || !gameStarted) return;
                 touchStartX = e.touches[0].clientX;
-                isMoving = true;
                 e.preventDefault();
             });
             
             canvas.addEventListener('touchmove', (e) => {
-                if (!isMoving || gameOver || isPaused || !gameStarted) return;
+                if (gameOver || isPaused || !gameStarted) return;
                 const touchX = e.touches[0].clientX;
                 const gameX = touchX * (WIDTH / window.innerWidth);
                 platform.x = Math.max(0, Math.min(WIDTH - platform.width, gameX - platform.width / 2));
                 e.preventDefault();
-            });
-            
-            canvas.addEventListener('touchend', () => {
-                isMoving = false;
             });
 
             document.getElementById('pauseBtn').addEventListener('click', togglePause);
@@ -354,16 +323,12 @@
         }
 
         function resetGame() {
-            console.log("Сброс игры");
-            
-            // Очистка массивов
             balls = [];
             powerups = [];
             bombs = [];
             particles = [];
             activePowerups = {};
             
-            // Инициализация платформы
             const platformWidth = Math.min(150, WIDTH * 0.2);
             originalPlatformY = HEIGHT * 0.85 - 20;
             
@@ -376,7 +341,6 @@
                 color: platformColors[0]
             };
 
-            // Создание первого мяча
             const ballRadius = Math.max(10, WIDTH * 0.02);
             balls.push({
                 x: WIDTH / 2,
@@ -388,7 +352,6 @@
                 trail: []
             });
 
-            // Сброс состояния игры
             score = 0;
             currentLevel = 1;
             bouncesInCurrentLevel = 0;
@@ -398,7 +361,6 @@
             keys = {};
 
             updateUI();
-            console.log("Игра сброшена, мячей:", balls.length);
         }
 
         function gameLoop(timestamp) {
@@ -427,13 +389,13 @@
             
             updatePlatformPosition();
             
-            // Случайное создание бонусов
             if (Math.random() < config.POWERUP_CHANCE && powerups.length < 2) {
                 createPowerup();
             }
         }
 
         function updatePlatform(deltaTime) {
+            // Плавное управление с физикой
             const acceleration = 0.001 * deltaTime;
             const friction = 0.92;
             
@@ -446,20 +408,19 @@
             platform.x += platformVelocity * deltaTime;
             platform.x = Math.max(0, Math.min(WIDTH - platform.width, platform.x));
             
-            // Создание пыли при движении
+            // Пыль при движении
             if (Math.abs(platformVelocity) > 0.1 && particles.length < config.MAX_PARTICLES) {
                 createDustParticles();
             }
         }
 
         function updateBalls(deltaTime) {
-            // Обновление следов мячей
+            // Обновляем следы мячей
             balls.forEach(ball => {
                 ball.trail.push({x: ball.x, y: ball.y});
                 if (ball.trail.length > 8) ball.trail.shift();
             });
 
-            // Движение мячей
             balls.forEach(ball => {
                 ball.x += ball.dx * (deltaTime / 16);
                 ball.y += ball.dy * (deltaTime / 16);
@@ -517,22 +478,28 @@
             const dy = ball2.y - ball1.y;
             const distance = Math.sqrt(dx*dx + dy*dy);
             
+            // Вектор нормали
             const nx = dx / distance;
             const ny = dy / distance;
             
+            // Относительная скорость
             const dvx = ball2.dx - ball1.dx;
             const dvy = ball2.dy - ball1.dy;
             const speed = dvx * nx + dvy * ny;
             
+            // Мячи не сталкиваются, если удаляются друг от друга
             if (speed > 0) return;
             
+            // Импульс столкновения
             const impulse = 1.8 * speed / (1/ball1.radius + 1/ball2.radius);
             
+            // Изменение скоростей
             ball1.dx += impulse * nx / ball1.radius;
             ball1.dy += impulse * ny / ball1.radius;
             ball2.dx -= impulse * nx / ball2.radius;
             ball2.dy -= impulse * ny / ball2.radius;
             
+            // Разделение мячей
             const overlap = (ball1.radius + ball2.radius - distance) / 2;
             ball1.x -= overlap * nx;
             ball1.y -= overlap * ny;
@@ -699,27 +666,20 @@
         }
 
         function render() {
-            // Очистка canvas
             ctx.clearRect(0, 0, WIDTH, HEIGHT);
             
-            // Рисование фона
-            drawBackground();
+            // Градиентный фон
+            const gradient = ctx.createLinearGradient(0, 0, WIDTH, HEIGHT);
+            gradient.addColorStop(0, '#1e3799');
+            gradient.addColorStop(1, '#0c2461');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, WIDTH, HEIGHT);
             
-            // Рисование игровых объектов
             drawParticles();
             drawBalls();
             drawPlatform();
             drawPowerups();
             drawBombs();
-        }
-
-        function drawBackground() {
-            const theme = THEME_COLORS[currentLevel] || THEME_COLORS[1];
-            const gradient = ctx.createLinearGradient(0, 0, WIDTH, HEIGHT);
-            gradient.addColorStop(0, theme.primary);
-            gradient.addColorStop(1, theme.secondary);
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, WIDTH, HEIGHT);
         }
 
         function drawParticles() {
@@ -735,7 +695,7 @@
 
         function drawBalls() {
             balls.forEach(ball => {
-                // Рисование следа
+                // Рисуем след
                 ball.trail.forEach((point, index) => {
                     const alpha = index / ball.trail.length * 0.3;
                     ctx.globalAlpha = alpha;
@@ -746,7 +706,7 @@
                 });
                 ctx.globalAlpha = 1;
                 
-                // Рисование мяча
+                // Рисуем мяч
                 ctx.fillStyle = ball.color;
                 ctx.beginPath();
                 ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
@@ -778,6 +738,7 @@
 
         function drawBombs() {
             bombs.forEach(bomb => {
+                // Пульсация бомбы
                 const pulse = 1 + 0.1 * Math.sin(Date.now() * 0.01);
                 const currentSize = bomb.size * pulse;
                 
@@ -831,24 +792,14 @@
 
         // Система рекордов
         function loadHighScores() {
-            try {
-                const saved = localStorage.getItem('highScores');
-                highScores = saved ? JSON.parse(saved) : [
-                    { name: "КИС", score: 100 }, { name: "МУР", score: 75 }, { name: "ПУХ", score: 50 }
-                ];
-            } catch (e) {
-                highScores = [
-                    { name: "КИС", score: 100 }, { name: "МУР", score: 75 }, { name: "ПУХ", score: 50 }
-                ];
-            }
+            const saved = localStorage.getItem('highScores');
+            highScores = saved ? JSON.parse(saved) : [
+                { name: "КИС", score: 100 }, { name: "МУР", score: 75 }, { name: "ПУХ", score: 50 }
+            ];
         }
 
         function saveHighScores() {
-            try {
-                localStorage.setItem('highScores', JSON.stringify(highScores));
-            } catch (e) {
-                console.log("Не удалось сохранить рекорды");
-            }
+            localStorage.setItem('highScores', JSON.stringify(highScores));
         }
 
         function updateHighScoresDisplay() {
@@ -878,18 +829,8 @@
             }
         }
 
-        // Инициализация при загрузке
-        window.onload = function() {
-            console.log("Документ загружен");
-            init();
-            
-            // Инициализация Telegram Web App
-            if (window.Telegram && Telegram.WebApp) {
-                Telegram.WebApp.ready();
-                Telegram.WebApp.expand();
-                console.log("Telegram Web App инициализирован");
-            }
-        };
+        // Запуск
+        window.onload = init;
     </script>
 </body>
 </html>
