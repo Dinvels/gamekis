@@ -171,6 +171,11 @@
             text-align: center;
             text-transform: uppercase;
         }
+
+        #highScoresList {
+            margin: 20px 0;
+            font-size: 20px;
+        }
     </style>
 </head>
 <body>
@@ -181,11 +186,6 @@
         
         <div id="ui">
             <div>🐱 Счет: <span id="score">0</span></div>
-        </div>
-        
-        <div id="highScores">
-            <div>🏆 Рекорды:</div>
-            <div id="highScoresList">Загрузка...</div>
         </div>
         
         <div id="touchControls">
@@ -212,6 +212,11 @@
             <h2>ИГРА ОКОНЧЕНА, КИС! 🐱</h2>
             <p>Ваш счет: <span id="finalScore">0</span></p>
             <p>Достигнут уровень: <span id="finalLevel">1</span></p>
+            
+            <div id="highScores">
+                <h3>🏆 Таблица рекордов:</h3>
+                <div id="highScoresList">Загрузка...</div>
+            </div>
             
             <div id="newHighScore" style="display: none; margin: 20px 0;">
                 <p>🎉 Новый рекорд! Введите ваши инициалы (3 буквы):</p>
@@ -305,14 +310,14 @@
             bomb: '#F44336'       // ПЛОХОЙ - красный
         };
 
-        // Символы для бонусов
+        // Символы для бонусов (без эмодзи)
         const POWERUP_SYMBOLS = {
-            expand: '📈',
-            shrink: '📉',
-            slow: '🐢',
-            fast: '🐇',
-            multi: '✨',
-            bomb: '💣'
+            expand: '+',
+            shrink: '-',
+            slow: '↓',
+            fast: '↑',
+            multi: 'x2',
+            bomb: '!'
         };
 
         // Функция для получения скорости с учетом типа устройства
@@ -445,7 +450,6 @@
                     { name: "ПУХ", score: 50 }
                 ];
             }
-            updateHighScoresDisplay();
         }
 
         function saveHighScores() {
@@ -1072,7 +1076,7 @@
             ctx.font = `bold ${fontSize}px Arial`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText('💣', bomb.x + bomb.size/2, bomb.y + bomb.size/2);
+            ctx.fillText('!', bomb.x + bomb.size/2, bomb.y + bomb.size/2);
             
             // Красное свечение
             ctx.shadowColor = '#FF0000';
@@ -1092,6 +1096,9 @@
             document.getElementById('finalScore').textContent = score;
             document.getElementById('finalLevel').textContent = currentLevel;
             document.getElementById('gameOver').style.display = 'flex';
+            
+            // Обновляем таблицу рекордов
+            updateHighScoresDisplay();
             
             // Проверяем, побит ли рекорд
             checkNewHighScore();
