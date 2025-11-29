@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Поймай мячик! - Кис! v1.0</title>
+    <title>Поймай мячик! - Кис! v1.1</title>
     <style>
         * {
             margin: 0;
@@ -165,6 +165,15 @@
             margin: 20px 0;
             font-size: 20px;
         }
+
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 20px;
+        }
     </style>
 </head>
 <body>
@@ -180,8 +189,9 @@
         <div id="levelUp">УРОВЕНЬ <span id="levelNumber">2</span>!</div>
         
         <div id="startScreen">
-            <h1>Поймай мячик, кис! 🐱</h1>
+            <h1>Поймай мячик, кис! 🐱 v1.1</h1>
             <p>Лови мячики, собирай бонусы и избегай бомб!</p>
+            <p>Новое: плавное управление, столкновения мячей, эффекты!</p>
             <button class="game-btn" onclick="startGame()">Готова, кис? 😼</button>
         </div>
         
@@ -214,7 +224,7 @@
     </div>
 
     <script>
-        // ВЕРСИЯ 1.0 - Стабильная базовая версия
+        // ВЕРСИЯ 1.1 - Оптимизированная для Telegram
         const config = {
             LEVEL_SETTINGS: {
                 1: { speed: 7.0, bouncesNeeded: 15 },
@@ -225,22 +235,25 @@
             },
             POWERUP_CHANCE: 0.2,
             POWERUP_DURATION: 5000,
-            BOMB_CHANCE: 0.08
+            BOMB_CHANCE: 0.08,
+            MAX_PARTICLES: 30
         };
 
         // Игровые переменные
         let canvas, ctx;
-        let platform, balls = [], powerups = [], bombs = [], activePowerups = {};
+        let platform, balls = [], powerups = [], bombs = [], particles = [], activePowerups = {};
         let score = 0, currentLevel = 1, bouncesInCurrentLevel = 0;
         let gameOver = false, isPaused = false, gameStarted = false;
         let lastTime = 0, originalPlatformY = 0;
         let highScores = [];
+        let keys = {};
+        let platformVelocity = 0;
 
         let WIDTH, HEIGHT;
         
         // Цвета
-        const platformColors = ['#FFB6C1', '#ADD8E6', '#98FB98'];
-        const ballColors = ['#ADD8E6', '#FFB6C1', '#98FB98'];
+        const platformColors = ['#FFB6C1', '#ADD8E6', '#98FB98', '#DDA0DD', '#F0E68C'];
+        const ballColors = ['#ADD8E6', '#FFB6C1', '#98FB98', '#DDA0DD', '#F0E68C'];
         const POWERUP_COLORS = {
             expand: '#4CAF50', shrink: '#F44336', slow: '#4CAF50', 
             fast: '#F44336', multi: '#4CAF50', bomb: '#F44336'
@@ -249,18 +262,31 @@
             expand: '+', shrink: '-', slow: '↓', fast: '↑', multi: 'x2', bomb: '!'
         };
 
+        // Тематические фоны для уровней
+        const THEME_COLORS = {
+            1: { primary: '#1e3799', secondary: '#0c2461' },
+            2: { primary: '#1e3799', secondary: '#0c2461' },
+            3: { primary: '#e55039', secondary: '#eb2f06' },
+            4: { primary: '#e55039', secondary: '#eb2f06' },
+            5: { primary: '#3c6382', secondary: '#0a3d62' }
+        };
+
         function init() {
+            console.log("Инициализация игры...");
+            
             canvas = document.getElementById('gameCanvas');
             ctx = canvas.getContext('2d');
             
+            // Быстрая инициализация без загрузки внешних ресурсов
             loadHighScores();
             setupCanvasSize();
             setupControls();
             
-            document.getElementById('startScreen').style.display = 'flex';
+            console.log("Игра готова к запуску");
         }
 
         function startGame() {
+            console.log("Запуск игры");
             document.getElementById('startScreen').style.display = 'none';
             gameStarted = true;
             resetGame();
@@ -272,35 +298,44 @@
             HEIGHT = window.innerHeight;
             canvas.width = WIDTH;
             canvas.height = HEIGHT;
+            console.log("Размер canvas:", WIDTH, "x", HEIGHT);
         }
 
         function setupControls() {
+            // Плавное управление клавиатурой
             window.addEventListener('keydown', (e) => {
                 if (gameOver || isPaused || !gameStarted) return;
-                
-                if (e.key === 'ArrowLeft') {
-                    platform.x = Math.max(0, platform.x - platform.speed);
-                } else if (e.key === 'ArrowRight') {
-                    platform.x = Math.min(WIDTH - platform.width, platform.x + platform.speed);
-                } else if (e.key === ' ' || e.key === 'Escape') {
+                keys[e.key] = true;
+                if (e.key === ' ' || e.key === 'Escape') {
                     togglePause();
                 }
             });
+            
+            window.addEventListener('keyup', (e) => {
+                keys[e.key] = false;
+            });
 
-            // Сенсорное управление
+            // Сенсорное управление для мобильных
             let touchStartX = 0;
+            let isMoving = false;
+            
             canvas.addEventListener('touchstart', (e) => {
                 if (isPaused || !gameStarted) return;
                 touchStartX = e.touches[0].clientX;
+                isMoving = true;
                 e.preventDefault();
             });
             
             canvas.addEventListener('touchmove', (e) => {
-                if (gameOver || isPaused || !gameStarted) return;
+                if (!isMoving || gameOver || isPaused || !gameStarted) return;
                 const touchX = e.touches[0].clientX;
                 const gameX = touchX * (WIDTH / window.innerWidth);
                 platform.x = Math.max(0, Math.min(WIDTH - platform.width, gameX - platform.width / 2));
                 e.preventDefault();
+            });
+            
+            canvas.addEventListener('touchend', () => {
+                isMoving = false;
             });
 
             document.getElementById('pauseBtn').addEventListener('click', togglePause);
@@ -319,11 +354,16 @@
         }
 
         function resetGame() {
+            console.log("Сброс игры");
+            
+            // Очистка массивов
             balls = [];
             powerups = [];
             bombs = [];
+            particles = [];
             activePowerups = {};
             
+            // Инициализация платформы
             const platformWidth = Math.min(150, WIDTH * 0.2);
             originalPlatformY = HEIGHT * 0.85 - 20;
             
@@ -332,10 +372,11 @@
                 height: 20,
                 x: WIDTH / 2 - platformWidth / 2,
                 y: originalPlatformY,
-                speed: WIDTH * 0.015,
+                speed: WIDTH * 0.02,
                 color: platformColors[0]
             };
 
+            // Создание первого мяча
             const ballRadius = Math.max(10, WIDTH * 0.02);
             balls.push({
                 x: WIDTH / 2,
@@ -343,16 +384,21 @@
                 radius: ballRadius,
                 dx: config.LEVEL_SETTINGS[1].speed * (WIDTH / 800),
                 dy: config.LEVEL_SETTINGS[1].speed * (WIDTH / 800),
-                color: ballColors[0]
+                color: ballColors[0],
+                trail: []
             });
 
+            // Сброс состояния игры
             score = 0;
             currentLevel = 1;
             bouncesInCurrentLevel = 0;
             gameOver = false;
             isPaused = false;
+            platformVelocity = 0;
+            keys = {};
 
             updateUI();
+            console.log("Игра сброшена, мячей:", balls.length);
         }
 
         function gameLoop(timestamp) {
@@ -368,9 +414,11 @@
         }
 
         function update(deltaTime) {
+            updatePlatform(deltaTime);
             updateBalls(deltaTime);
             updatePowerups();
             updateBombs();
+            updateParticles(deltaTime);
             
             if (balls.length === 0) {
                 endGame();
@@ -379,26 +427,57 @@
             
             updatePlatformPosition();
             
+            // Случайное создание бонусов
             if (Math.random() < config.POWERUP_CHANCE && powerups.length < 2) {
                 createPowerup();
             }
         }
 
+        function updatePlatform(deltaTime) {
+            const acceleration = 0.001 * deltaTime;
+            const friction = 0.92;
+            
+            if (keys['ArrowLeft']) platformVelocity -= acceleration;
+            if (keys['ArrowRight']) platformVelocity += acceleration;
+            
+            platformVelocity *= friction;
+            platformVelocity = Math.max(-platform.speed, Math.min(platform.speed, platformVelocity));
+            
+            platform.x += platformVelocity * deltaTime;
+            platform.x = Math.max(0, Math.min(WIDTH - platform.width, platform.x));
+            
+            // Создание пыли при движении
+            if (Math.abs(platformVelocity) > 0.1 && particles.length < config.MAX_PARTICLES) {
+                createDustParticles();
+            }
+        }
+
         function updateBalls(deltaTime) {
+            // Обновление следов мячей
+            balls.forEach(ball => {
+                ball.trail.push({x: ball.x, y: ball.y});
+                if (ball.trail.length > 8) ball.trail.shift();
+            });
+
+            // Движение мячей
             balls.forEach(ball => {
                 ball.x += ball.dx * (deltaTime / 16);
                 ball.y += ball.dy * (deltaTime / 16);
 
+                // Столкновение со стенами
                 if (ball.x - ball.radius <= 0 || ball.x + ball.radius >= WIDTH) {
                     ball.dx = -ball.dx;
                     ball.x = Math.max(ball.radius, Math.min(WIDTH - ball.radius, ball.x));
+                    createCollisionParticles(ball.x, ball.y, ball.color);
                 }
 
                 if (ball.y - ball.radius <= 0) {
                     ball.dy = -ball.dy;
                     ball.y = ball.radius;
+                    createCollisionParticles(ball.x, ball.y, ball.color);
                 }
 
+                // Столкновение с платформой
                 if (ball.y + ball.radius >= platform.y && 
                     ball.y - ball.radius <= platform.y + platform.height &&
                     ball.x >= platform.x && 
@@ -406,6 +485,59 @@
                     handlePlatformCollision(ball);
                 }
             });
+
+            // Проверка столкновений между мячами
+            checkBallCollisions();
+        }
+
+        function checkBallCollisions() {
+            for (let i = 0; i < balls.length; i++) {
+                for (let j = i + 1; j < balls.length; j++) {
+                    const ball1 = balls[i];
+                    const ball2 = balls[j];
+                    
+                    const dx = ball2.x - ball1.x;
+                    const dy = ball2.y - ball1.y;
+                    const distance = Math.sqrt(dx*dx + dy*dy);
+                    
+                    if (distance < ball1.radius + ball2.radius) {
+                        handleBallCollision(ball1, ball2);
+                        createCollisionParticles(
+                            (ball1.x + ball2.x) / 2, 
+                            (ball1.y + ball2.y) / 2,
+                            ball1.color
+                        );
+                    }
+                }
+            }
+        }
+
+        function handleBallCollision(ball1, ball2) {
+            const dx = ball2.x - ball1.x;
+            const dy = ball2.y - ball1.y;
+            const distance = Math.sqrt(dx*dx + dy*dy);
+            
+            const nx = dx / distance;
+            const ny = dy / distance;
+            
+            const dvx = ball2.dx - ball1.dx;
+            const dvy = ball2.dy - ball1.dy;
+            const speed = dvx * nx + dvy * ny;
+            
+            if (speed > 0) return;
+            
+            const impulse = 1.8 * speed / (1/ball1.radius + 1/ball2.radius);
+            
+            ball1.dx += impulse * nx / ball1.radius;
+            ball1.dy += impulse * ny / ball1.radius;
+            ball2.dx -= impulse * nx / ball2.radius;
+            ball2.dy -= impulse * ny / ball2.radius;
+            
+            const overlap = (ball1.radius + ball2.radius - distance) / 2;
+            ball1.x -= overlap * nx;
+            ball1.y -= overlap * ny;
+            ball2.x += overlap * nx;
+            ball2.y += overlap * ny;
         }
 
         function handlePlatformCollision(ball) {
@@ -489,6 +621,47 @@
             });
         }
 
+        function createCollisionParticles(x, y, color) {
+            if (particles.length >= config.MAX_PARTICLES) return;
+            
+            for (let i = 0; i < 5; i++) {
+                particles.push({
+                    x: x, y: y,
+                    vx: (Math.random() - 0.5) * 8,
+                    vy: (Math.random() - 0.5) * 8,
+                    life: 1,
+                    color: color,
+                    size: Math.random() * 3 + 1
+                });
+            }
+        }
+
+        function createDustParticles() {
+            if (particles.length >= config.MAX_PARTICLES) return;
+            
+            particles.push({
+                x: platform.x + Math.random() * platform.width,
+                y: platform.y + platform.height,
+                vx: (Math.random() - 0.5) * 3,
+                vy: Math.random() * 2 + 1,
+                life: 1,
+                color: '#CCCCCC',
+                size: Math.random() * 2 + 1
+            });
+        }
+
+        function updateParticles(deltaTime) {
+            particles.forEach((particle, index) => {
+                particle.x += particle.vx * (deltaTime / 16);
+                particle.y += particle.vy * (deltaTime / 16);
+                particle.life -= 0.03;
+                
+                if (particle.life <= 0) {
+                    particles.splice(index, 1);
+                }
+            });
+        }
+
         function updatePlatformPosition() {
             const lift = Math.min(HEIGHT * 0.3, Math.floor(score / 50) * (HEIGHT * 0.03));
             platform.y = originalPlatformY - lift;
@@ -515,9 +688,10 @@
                     });
                     break;
                 case 'multi':
-                    if (balls.length < 3) {
+                    if (balls.length < 5) {
                         const newBall = {...balls[0]};
-                        newBall.dx = -newBall.dx;
+                        newBall.dx = -newBall.dx * (0.8 + Math.random() * 0.4);
+                        newBall.trail = [];
                         balls.push(newBall);
                     }
                     break;
@@ -525,30 +699,68 @@
         }
 
         function render() {
+            // Очистка canvas
             ctx.clearRect(0, 0, WIDTH, HEIGHT);
             
-            // Простой фон
-            ctx.fillStyle = '#1e3799';
-            ctx.fillRect(0, 0, WIDTH, HEIGHT);
+            // Рисование фона
+            drawBackground();
             
-            drawPlatform();
+            // Рисование игровых объектов
+            drawParticles();
             drawBalls();
+            drawPlatform();
             drawPowerups();
             drawBombs();
         }
 
-        function drawPlatform() {
-            ctx.fillStyle = platform.color;
-            ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+        function drawBackground() {
+            const theme = THEME_COLORS[currentLevel] || THEME_COLORS[1];
+            const gradient = ctx.createLinearGradient(0, 0, WIDTH, HEIGHT);
+            gradient.addColorStop(0, theme.primary);
+            gradient.addColorStop(1, theme.secondary);
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, WIDTH, HEIGHT);
+        }
+
+        function drawParticles() {
+            particles.forEach(particle => {
+                ctx.globalAlpha = particle.life;
+                ctx.fillStyle = particle.color;
+                ctx.beginPath();
+                ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1;
         }
 
         function drawBalls() {
             balls.forEach(ball => {
+                // Рисование следа
+                ball.trail.forEach((point, index) => {
+                    const alpha = index / ball.trail.length * 0.3;
+                    ctx.globalAlpha = alpha;
+                    ctx.fillStyle = ball.color;
+                    ctx.beginPath();
+                    ctx.arc(point.x, point.y, ball.radius * 0.5, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+                ctx.globalAlpha = 1;
+                
+                // Рисование мяча
                 ctx.fillStyle = ball.color;
                 ctx.beginPath();
                 ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
                 ctx.fill();
             });
+        }
+
+        function drawPlatform() {
+            ctx.fillStyle = platform.color;
+            ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+            
+            // Детали платформы
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(platform.x, platform.y, platform.width, 2);
         }
 
         function drawPowerups() {
@@ -566,9 +778,12 @@
 
         function drawBombs() {
             bombs.forEach(bomb => {
+                const pulse = 1 + 0.1 * Math.sin(Date.now() * 0.01);
+                const currentSize = bomb.size * pulse;
+                
                 ctx.fillStyle = '#F44336';
                 ctx.beginPath();
-                ctx.arc(bomb.x + bomb.size/2, bomb.y + bomb.size/2, bomb.size/2, 0, Math.PI * 2);
+                ctx.arc(bomb.x + bomb.size/2, bomb.y + bomb.size/2, currentSize/2, 0, Math.PI * 2);
                 ctx.fill();
                 
                 ctx.fillStyle = '#FFFFFF';
@@ -616,14 +831,24 @@
 
         // Система рекордов
         function loadHighScores() {
-            const saved = localStorage.getItem('highScores');
-            highScores = saved ? JSON.parse(saved) : [
-                { name: "КИС", score: 100 }, { name: "МУР", score: 75 }, { name: "ПУХ", score: 50 }
-            ];
+            try {
+                const saved = localStorage.getItem('highScores');
+                highScores = saved ? JSON.parse(saved) : [
+                    { name: "КИС", score: 100 }, { name: "МУР", score: 75 }, { name: "ПУХ", score: 50 }
+                ];
+            } catch (e) {
+                highScores = [
+                    { name: "КИС", score: 100 }, { name: "МУР", score: 75 }, { name: "ПУХ", score: 50 }
+                ];
+            }
         }
 
         function saveHighScores() {
-            localStorage.setItem('highScores', JSON.stringify(highScores));
+            try {
+                localStorage.setItem('highScores', JSON.stringify(highScores));
+            } catch (e) {
+                console.log("Не удалось сохранить рекорды");
+            }
         }
 
         function updateHighScoresDisplay() {
@@ -653,8 +878,18 @@
             }
         }
 
-        // Запуск
-        window.onload = init;
+        // Инициализация при загрузке
+        window.onload = function() {
+            console.log("Документ загружен");
+            init();
+            
+            // Инициализация Telegram Web App
+            if (window.Telegram && Telegram.WebApp) {
+                Telegram.WebApp.ready();
+                Telegram.WebApp.expand();
+                console.log("Telegram Web App инициализирован");
+            }
+        };
     </script>
 </body>
 </html>
