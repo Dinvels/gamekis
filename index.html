@@ -233,32 +233,34 @@
         // Конфигурация игры
         const config = {
             LEVEL_SETTINGS: {
-                1: { speed: 7.0, bouncesNeeded: 24 },
-                2: { speed: 9.0, bouncesNeeded: 24 },
-                3: { speed: 11.0, bouncesNeeded: 24 },
-                4: { speed: 13.0, bouncesNeeded: 24 },
-                5: { speed: 15.0, bouncesNeeded: 24 },
-                6: { speed: 17.0, bouncesNeeded: 24 },
-                7: { speed: 19.0, bouncesNeeded: 24 },
-                8: { speed: 21.0, bouncesNeeded: 24 },
-                9: { speed: 23.0, bouncesNeeded: 24 },
-                10: { speed: 25.0, bouncesNeeded: 24 },
-                11: { speed: 27.0, bouncesNeeded: 24 },
-                12: { speed: 29.0, bouncesNeeded: 24 },
-                13: { speed: 31.0, bouncesNeeded: 24 },
-                14: { speed: 33.0, bouncesNeeded: 24 },
-                15: { speed: 35.0, bouncesNeeded: 9999 }
+                1: { speed: 7.0, bouncesNeeded: 24, theme: 'air' },
+                2: { speed: 9.0, bouncesNeeded: 24, theme: 'air' },
+                3: { speed: 11.0, bouncesNeeded: 24, theme: 'water' },
+                4: { speed: 13.0, bouncesNeeded: 24, theme: 'water' },
+                5: { speed: 15.0, bouncesNeeded: 24, theme: 'earth' },
+                6: { speed: 17.0, bouncesNeeded: 24, theme: 'earth' },
+                7: { speed: 19.0, bouncesNeeded: 24, theme: 'lava' },
+                8: { speed: 21.0, bouncesNeeded: 24, theme: 'lava' },
+                9: { speed: 23.0, bouncesNeeded: 24, theme: 'space' },
+                10: { speed: 25.0, bouncesNeeded: 24, theme: 'space' },
+                11: { speed: 27.0, bouncesNeeded: 24, theme: 'space' },
+                12: { speed: 29.0, bouncesNeeded: 24, theme: 'space' },
+                13: { speed: 31.0, bouncesNeeded: 24, theme: 'space' },
+                14: { speed: 33.0, bouncesNeeded: 24, theme: 'space' },
+                15: { speed: 35.0, bouncesNeeded: 9999, theme: 'space' }
             },
             POWERUP_CHANCE: 0.3,
             POWERUP_TYPES: ["expand", "shrink", "slow", "fast", "multi", "bomb"],
-            POWERUP_DURATION: 5000, // 5 секунд
+            POWERUP_DURATION: 5000,
             BOMB_CHANCE: 0.1,
-            BOMB_CHANCE_AFTER_70: 0.25 // Увеличиваем шанс бомб после 70 очков
+            BOMB_CHANCE_AFTER_70: 0.25,
+            PORTAL_CHANCE: 0.05,
+            BALL_TYPES: ["normal", "sticky", "split", "magnetic", "ghost"]
         };
 
         // Игровые переменные
         let canvas, ctx;
-        let platform, balls, powerups, activePowerups, bombs;
+        let platform, balls, powerups, activePowerups, bombs, portals, particles;
         let score = 0;
         let currentLevel = 1;
         let bouncesInCurrentLevel = 0;
@@ -269,6 +271,8 @@
         let bombAnimationTime = 0;
         let originalPlatformY = 0;
         let highScores = [];
+        let keys = {};
+        let platformVelocity = 0;
         
         // Размеры canvas (будут установлены при инициализации)
         let WIDTH, HEIGHT;
@@ -302,12 +306,12 @@
 
         // Цвета для бонусов и бомб - ХОРОШИЕ (зеленые) и ПЛОХИЕ (красные)
         const POWERUP_COLORS = {
-            expand: '#4CAF50',    // ХОРОШИЙ - зеленый
-            shrink: '#F44336',    // ПЛОХОЙ - красный
-            slow: '#4CAF50',      // ХОРОШИЙ - зеленый
-            fast: '#F44336',      // ПЛОХОЙ - красный
-            multi: '#4CAF50',     // ХОРОШИЙ - зеленый
-            bomb: '#F44336'       // ПЛОХОЙ - красный
+            expand: '#4CAF50',
+            shrink: '#F44336',
+            slow: '#4CAF50',
+            fast: '#F44336',
+            multi: '#4CAF50',
+            bomb: '#F44336'
         };
 
         // Символы для бонусов (без эмодзи)
@@ -320,11 +324,19 @@
             bomb: '!'
         };
 
+        // Тематические цвета для фонов
+        const THEME_COLORS = {
+            air: ['#87CEEB', '#E0F7FA', '#B3E5FC'],
+            water: ['#1E88E5', '#4FC3F7', '#80DEEA'],
+            earth: ['#795548', '#8D6E63', '#A1887F'],
+            lava: ['#FF5722', '#FF7043', '#FF8A65'],
+            space: ['#0D47A1', '#1A237E', '#311B92']
+        };
+
         // Функция для получения скорости с учетом типа устройства
         function getBallSpeed(level) {
             let baseSpeed = config.LEVEL_SETTINGS[level].speed * (WIDTH / 800);
             if (isMobile) {
-                // На мобильных устройствах начинаем с 10 и увеличиваем
                 const mobileBaseSpeed = 10 + (level - 1) * 2;
                 return mobileBaseSpeed * (WIDTH / 800) * MOBILE_SPEED_MULTIPLIER;
             }
@@ -363,14 +375,12 @@
         }
 
         function setupCanvasSize() {
-            // Устанавливаем размеры canvas равными размеру окна
             WIDTH = window.innerWidth;
             HEIGHT = window.innerHeight;
             
             canvas.width = WIDTH;
             canvas.height = HEIGHT;
             
-            // Обработка изменения размера окна
             window.addEventListener('resize', () => {
                 WIDTH = window.innerWidth;
                 HEIGHT = window.innerHeight;
@@ -381,14 +391,12 @@
 
         async function loadResources() {
             try {
-                // Загрузка фоновых изображений
                 images.background1 = await loadImage('generated_image_20251128184952.jpg');
                 images.background3 = await loadImage('1212.jpg');
                 images.background6 = await loadImage('4.jpg');
                 images.background10 = await loadImage('3.jpg');
                 images.background14 = await loadImage('2.jpg');
                 
-                // Загрузка звуков
                 sounds.hit = new Audio('DP2_Gang_Rim_Hit.wav');
                 sounds.music = new Audio('U.mp3');
                 sounds.bomb = new Audio('DP2_Gang_Rim_Hit.wav');
@@ -400,7 +408,6 @@
                 
             } catch (error) {
                 console.log("Некоторые ресурсы не загружены, игра продолжается без них");
-                // Создаем запасные фоны
                 createFallbackBackgrounds();
             }
         }
@@ -415,7 +422,6 @@
         }
 
         function createFallbackBackgrounds() {
-            // Создаем запасные градиентные фоны
             const createGradientBackground = (color1, color2) => {
                 const canvas = document.createElement('canvas');
                 canvas.width = 800;
@@ -482,14 +488,10 @@
                 return;
             }
             
-            // Добавляем новый рекорд
             highScores.push({ name: initials, score: score });
-            
-            // Сортируем по убыванию и оставляем топ-5
             highScores.sort((a, b) => b.score - a.score);
             highScores = highScores.slice(0, 5);
             
-            // Сохраняем и обновляем отображение
             saveHighScores();
             updateHighScoresDisplay();
             
@@ -497,17 +499,18 @@
         }
 
         function setupControls() {
-            // Клавиатура (для ПК)
+            // Плавное управление клавиатурой
             window.addEventListener('keydown', (e) => {
                 if (gameOver || isPaused || !gameStarted) return;
+                keys[e.key] = true;
                 
-                if (e.key === 'ArrowLeft') {
-                    platform.x = Math.max(0, platform.x - platform.speed * 3);
-                } else if (e.key === 'ArrowRight') {
-                    platform.x = Math.min(WIDTH - platform.width, platform.x + platform.speed * 3);
-                } else if (e.key === ' ' || e.key === 'Escape') {
+                if (e.key === ' ' || e.key === 'Escape') {
                     togglePause();
                 }
+            });
+            
+            window.addEventListener('keyup', (e) => {
+                keys[e.key] = false;
             });
             
             // Сенсорное управление (для мобильных)
@@ -585,7 +588,6 @@
             
             const baseSpeed = WIDTH * 0.02;
             
-            // Платформа начинается на 15% от нижнего края экрана
             originalPlatformY = HEIGHT * 0.85 - platformHeight;
             
             platform = {
@@ -595,7 +597,8 @@
                 y: originalPlatformY,
                 speed: baseSpeed,
                 color: platformColors[currentPlatformColorIndex],
-                originalY: originalPlatformY
+                originalY: originalPlatformY,
+                targetX: WIDTH / 2 - platformWidth / 2
             };
 
             const ballRadius = Math.max(10, Math.min(20, WIDTH * 0.02));
@@ -608,11 +611,15 @@
                 radius: ballRadius,
                 dx: Math.cos(angle) * speed,
                 dy: Math.sin(angle) * speed,
-                color: ballColors[currentBallColorIndex]
+                color: ballColors[currentBallColorIndex],
+                type: 'normal',
+                trail: []
             }];
 
             powerups = [];
             bombs = [];
+            portals = [];
+            particles = [];
             activePowerups = {};
             score = 0;
             currentLevel = 1;
@@ -620,16 +627,17 @@
             gameOver = false;
             isPaused = false;
             bombAnimationTime = 0;
+            platformVelocity = 0;
+            keys = {};
 
             updateUI();
         }
 
         function gameLoop(timestamp) {
             if (!lastTime) lastTime = timestamp;
-            const deltaTime = timestamp - lastTime;
+            const deltaTime = Math.min(timestamp - lastTime, 1000/30); // Ограничиваем deltaTime
             lastTime = timestamp;
 
-            // Обновляем время анимации бомб
             bombAnimationTime += deltaTime;
 
             if (!gameOver && !isPaused && gameStarted) {
@@ -640,15 +648,15 @@
         }
 
         function update(deltaTime) {
+            updatePlatform(deltaTime);
             updatePowerups();
             updateBombs();
+            updatePortals();
+            updateParticles(deltaTime);
             
-            balls.forEach((ball, index) => {
-                updateBall(ball, index);
-            });
-
-            updatePowerupsMovement();
-            updateBombsMovement();
+            // Обновляем мячи и проверяем столкновения
+            updateBalls(deltaTime);
+            checkBallCollisions();
 
             balls = balls.filter(ball => ball.y - ball.radius <= HEIGHT);
 
@@ -656,47 +664,217 @@
                 endGame();
             }
             
-            // Обновляем позицию платформы в зависимости от счета
             updatePlatformPosition();
+            
+            // Создание порталов
+            if (Math.random() < config.PORTAL_CHANCE && portals.length < 2) {
+                createPortal();
+            }
+        }
+
+        function updatePlatform(deltaTime) {
+            const acceleration = 0.002 * deltaTime;
+            const friction = 0.9;
+            
+            if (keys['ArrowLeft']) {
+                platformVelocity -= acceleration;
+            }
+            if (keys['ArrowRight']) {
+                platformVelocity += acceleration;
+            }
+            
+            // Применяем трение
+            platformVelocity *= friction;
+            
+            // Ограничиваем максимальную скорость
+            platformVelocity = Math.max(-platform.speed, Math.min(platform.speed, platformVelocity));
+            
+            // Обновляем позицию
+            platform.x += platformVelocity * deltaTime;
+            platform.x = Math.max(0, Math.min(WIDTH - platform.width, platform.x));
+            
+            // Создаем частицы пыли при движении
+            if (Math.abs(platformVelocity) > 0.1) {
+                createDustParticles();
+            }
         }
 
         function updatePlatformPosition() {
-            // Поднимаем платформу каждые 50 очков, но не более чем на 30% от высоты экрана
             const maxLift = HEIGHT * 0.3;
-            const liftIncrement = maxLift / 10; // 10 ступеней до максимума
+            const liftIncrement = maxLift / 10;
             
-            // Определяем, на сколько поднять платформу
             const scoreLift = Math.floor(score / 50) * liftIncrement;
             const finalLift = Math.min(maxLift, scoreLift);
             
-            // Обновляем позицию платформы
             platform.y = originalPlatformY - finalLift;
         }
 
-        function updateBall(ball, ballIndex) {
-            ball.x += ball.dx;
-            ball.y += ball.dy;
-
-            if (ball.x - ball.radius <= 0 || ball.x + ball.radius >= WIDTH) {
-                ball.dx = -ball.dx;
-                ball.x = Math.max(ball.radius, Math.min(WIDTH - ball.radius, ball.x));
-            }
-
-            if (ball.y - ball.radius <= 0) {
-                ball.dy = -ball.dy;
-                ball.y = ball.radius;
-            }
-
-            if (ball.y + ball.radius >= platform.y && 
-                ball.y - ball.radius <= platform.y + platform.height &&
-                ball.x >= platform.x && 
-                ball.x <= platform.x + platform.width) {
+        function updateBalls(deltaTime) {
+            balls.forEach((ball, index) => {
+                // Обновляем след
+                ball.trail.push({x: ball.x, y: ball.y});
+                if (ball.trail.length > 10) {
+                    ball.trail.shift();
+                }
                 
-                handlePlatformCollision(ball);
+                // Применяем специальное поведение в зависимости от типа мяча
+                applyBallBehavior(ball, deltaTime);
+                
+                // Обновляем позицию
+                ball.x += ball.dx * (deltaTime / 16);
+                ball.y += ball.dy * (deltaTime / 16);
+
+                // Проверяем столкновение со стенами
+                if (ball.x - ball.radius <= 0 || ball.x + ball.radius >= WIDTH) {
+                    ball.dx = -ball.dx;
+                    ball.x = Math.max(ball.radius, Math.min(WIDTH - ball.radius, ball.x));
+                    createCollisionParticles(ball.x, ball.y, ball.color);
+                }
+
+                if (ball.y - ball.radius <= 0) {
+                    ball.dy = -ball.dy;
+                    ball.y = ball.radius;
+                    createCollisionParticles(ball.x, ball.y, ball.color);
+                }
+
+                // Проверяем столкновение с платформой
+                if (ball.y + ball.radius >= platform.y && 
+                    ball.y - ball.radius <= platform.y + platform.height &&
+                    ball.x >= platform.x && 
+                    ball.x <= platform.x + platform.width) {
+                    
+                    handlePlatformCollision(ball);
+                }
+                
+                // Проверяем телепортацию через порталы
+                checkPortalCollision(ball);
+            });
+        }
+
+        function applyBallBehavior(ball, deltaTime) {
+            switch(ball.type) {
+                case 'sticky':
+                    // Липкий мяч слегка притягивается к платформе
+                    if (ball.y > HEIGHT / 2) {
+                        const dx = platform.x + platform.width/2 - ball.x;
+                        ball.dx += dx * 0.0001 * deltaTime;
+                    }
+                    break;
+                case 'magnetic':
+                    // Магнитный мяч притягивает другие мячи
+                    balls.forEach(otherBall => {
+                        if (otherBall !== ball) {
+                            const dx = ball.x - otherBall.x;
+                            const dy = ball.y - otherBall.y;
+                            const distance = Math.sqrt(dx*dx + dy*dy);
+                            
+                            if (distance < 150 && distance > 0) {
+                                const force = 0.5 / (distance * distance);
+                                otherBall.dx += (dx / distance) * force * deltaTime;
+                                otherBall.dy += (dy / distance) * force * deltaTime;
+                            }
+                        }
+                    });
+                    break;
+                case 'ghost':
+                    // Призрачный мяч иногда проходит сквозь платформу
+                    if (Math.random() < 0.005) {
+                        ball.ghost = true;
+                        setTimeout(() => { ball.ghost = false; }, 1000);
+                    }
+                    break;
             }
         }
 
+        function checkBallCollisions() {
+            for (let i = 0; i < balls.length; i++) {
+                for (let j = i + 1; j < balls.length; j++) {
+                    const ball1 = balls[i];
+                    const ball2 = balls[j];
+                    
+                    const dx = ball2.x - ball1.x;
+                    const dy = ball2.y - ball1.y;
+                    const distance = Math.sqrt(dx*dx + dy*dy);
+                    
+                    if (distance < ball1.radius + ball2.radius) {
+                        // Столкновение мячей
+                        handleBallCollision(ball1, ball2);
+                        createCollisionParticles(
+                            (ball1.x + ball2.x) / 2, 
+                            (ball1.y + ball2.y) / 2,
+                            ball1.color
+                        );
+                        
+                        // Разделяющийся мяч
+                        if (ball1.type === 'split' && balls.length < 10) {
+                            splitBall(ball1);
+                        }
+                        if (ball2.type === 'split' && balls.length < 10) {
+                            splitBall(ball2);
+                        }
+                    }
+                }
+            }
+        }
+
+        function handleBallCollision(ball1, ball2) {
+            // Простой физический расчет столкновения
+            const dx = ball2.x - ball1.x;
+            const dy = ball2.y - ball1.y;
+            const distance = Math.sqrt(dx*dx + dy*dy);
+            
+            // Нормализованный вектор столкновения
+            const nx = dx / distance;
+            const ny = dy / distance;
+            
+            // Относительная скорость
+            const dvx = ball2.dx - ball1.dx;
+            const dvy = ball2.dy - ball1.dy;
+            
+            // Скорость вдоль нормали
+            const speed = dvx * nx + dvy * ny;
+            
+            // Мячи не сталкиваются, если удаляются друг от друга
+            if (speed > 0) return;
+            
+            // Импульс столкновения
+            const impulse = 2 * speed / (1/ball1.radius + 1/ball2.radius);
+            
+            // Изменяем скорости
+            ball1.dx += impulse * nx / ball1.radius;
+            ball1.dy += impulse * ny / ball1.radius;
+            ball2.dx -= impulse * nx / ball2.radius;
+            ball2.dy -= impulse * ny / ball2.radius;
+            
+            // Разделяем мячи, чтобы они не застряли
+            const overlap = (ball1.radius + ball2.radius - distance) / 2;
+            ball1.x -= overlap * nx;
+            ball1.y -= overlap * ny;
+            ball2.x += overlap * nx;
+            ball2.y += overlap * ny;
+        }
+
+        function splitBall(ball) {
+            const newBall1 = {...ball};
+            const newBall2 = {...ball};
+            
+            newBall1.dx = -ball.dx * 0.8;
+            newBall1.dy = -ball.dy * 0.8;
+            newBall1.radius = ball.radius * 0.7;
+            newBall1.trail = [];
+            
+            newBall2.dx = ball.dx * 0.8;
+            newBall2.dy = ball.dy * 0.8;
+            newBall2.radius = ball.radius * 0.7;
+            newBall2.trail = [];
+            
+            balls.push(newBall1, newBall2);
+            balls.splice(balls.indexOf(ball), 1);
+        }
+
         function handlePlatformCollision(ball) {
+            if (ball.ghost) return;
+            
             const relativeIntersectX = (platform.x + platform.width / 2) - ball.x;
             const normalizedX = relativeIntersectX / (platform.width / 2);
             const bounceAngle = normalizedX * (Math.PI / 3);
@@ -733,11 +911,15 @@
 
             changeColors();
 
-            // Создание бонусов и бомб
             const currentBombChance = score >= 70 ? config.BOMB_CHANCE_AFTER_70 : config.BOMB_CHANCE;
             
             if (Math.random() < config.POWERUP_CHANCE && powerups.length < 3) {
                 createPowerup(currentBombChance);
+            }
+
+            // Случайно меняем тип мяча
+            if (Math.random() < 0.1 && balls.length === 1) {
+                ball.type = config.BALL_TYPES[Math.floor(Math.random() * config.BALL_TYPES.length)];
             }
 
             playHitSound();
@@ -770,7 +952,6 @@
             const powerupSize = Math.max(15, WIDTH * 0.03);
             let type;
             
-            // Шанс создания бомбы
             if (Math.random() < bombChance) {
                 type = "bomb";
             } else {
@@ -782,10 +963,10 @@
                     x: Math.random() * (WIDTH - powerupSize * 2) + powerupSize,
                     y: 0,
                     type: type,
-                    speed: 3 * (HEIGHT / 600), // Бомбы падают быстрее
+                    speed: 3 * (HEIGHT / 600),
                     size: powerupSize,
                     color: POWERUP_COLORS[type] || '#000000',
-                    pulsePhase: Math.random() * Math.PI * 2 // Фаза пульсации для анимации
+                    pulsePhase: Math.random() * Math.PI * 2
                 });
             } else {
                 powerups.push({
@@ -796,6 +977,28 @@
                     size: powerupSize,
                     color: POWERUP_COLORS[type] || '#FFFFFF'
                 });
+            }
+        }
+
+        function createPortal() {
+            const portalSize = Math.max(30, WIDTH * 0.05);
+            const side = Math.random() > 0.5 ? 'left' : 'right';
+            
+            portals.push({
+                x: side === 'left' ? portalSize : WIDTH - portalSize,
+                y: Math.random() * (HEIGHT * 0.6) + HEIGHT * 0.2,
+                size: portalSize,
+                side: side,
+                rotation: 0,
+                pair: null
+            });
+            
+            // Создаем парный портал
+            if (portals.length >= 2) {
+                const portal1 = portals[portals.length - 2];
+                const portal2 = portals[portals.length - 1];
+                portal1.pair = portal2;
+                portal2.pair = portal1;
             }
         }
 
@@ -827,7 +1030,6 @@
                     bomb.x >= platform.x && 
                     bomb.x <= platform.x + platform.width) {
                     
-                    // Столкновение с бомбой - проигрыш
                     playBombSound();
                     endGame();
                 }
@@ -838,10 +1040,95 @@
             });
         }
 
+        function updatePortals() {
+            portals.forEach(portal => {
+                portal.rotation += 0.02;
+            });
+            
+            // Удаляем старые порталы
+            if (portals.length > 4) {
+                portals.splice(0, 2);
+            }
+        }
+
+        function checkPortalCollision(ball) {
+            portals.forEach(portal => {
+                const dx = ball.x - portal.x;
+                const dy = ball.y - portal.y;
+                const distance = Math.sqrt(dx*dx + dy*dy);
+                
+                if (distance < portal.size / 2 + ball.radius && portal.pair) {
+                    // Телепортируем мяч
+                    ball.x = portal.pair.x;
+                    ball.y = portal.pair.y;
+                    
+                    // Сохраняем скорость, но немного меняем направление для эффекта
+                    const speed = Math.sqrt(ball.dx*ball.dx + ball.dy*ball.dy);
+                    const angle = Math.atan2(ball.dy, ball.dx) + (Math.random() - 0.5) * 0.5;
+                    ball.dx = Math.cos(angle) * speed;
+                    ball.dy = Math.sin(angle) * speed;
+                    
+                    createTeleportParticles(ball.x, ball.y);
+                }
+            });
+        }
+
+        function createCollisionParticles(x, y, color) {
+            for (let i = 0; i < 8; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 8,
+                    vy: (Math.random() - 0.5) * 8,
+                    life: 1,
+                    color: color,
+                    size: Math.random() * 3 + 1
+                });
+            }
+        }
+
+        function createDustParticles() {
+            for (let i = 0; i < 2; i++) {
+                particles.push({
+                    x: platform.x + Math.random() * platform.width,
+                    y: platform.y + platform.height,
+                    vx: (Math.random() - 0.5) * 2,
+                    vy: Math.random() * 2 + 1,
+                    life: 1,
+                    color: '#CCCCCC',
+                    size: Math.random() * 2 + 1
+                });
+            }
+        }
+
+        function createTeleportParticles(x, y) {
+            for (let i = 0; i < 15; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 6,
+                    vy: (Math.random() - 0.5) * 6,
+                    life: 1,
+                    color: '#9C27B0',
+                    size: Math.random() * 4 + 2
+                });
+            }
+        }
+
+        function updateParticles(deltaTime) {
+            particles.forEach((particle, index) => {
+                particle.x += particle.vx * (deltaTime / 16);
+                particle.y += particle.vy * (deltaTime / 16);
+                particle.life -= 0.02 * (deltaTime / 16);
+                
+                if (particle.life <= 0) {
+                    particles.splice(index, 1);
+                }
+            });
+        }
+
         function updateBombs() {
-            // Анимация пульсации бомб
             bombs.forEach(bomb => {
-                // Обновляем фазу пульсации на основе времени
                 bomb.pulsePhase += 0.05;
                 if (bomb.pulsePhase > Math.PI * 2) {
                     bomb.pulsePhase -= Math.PI * 2;
@@ -863,22 +1150,18 @@
             const now = Date.now();
             const duration = config.POWERUP_DURATION;
             
-            // Если баф уже активен, продлеваем время и увеличиваем счетчик
             if (activePowerups[type]) {
                 activePowerups[type].expires = now + duration;
                 activePowerups[type].count = (activePowerups[type].count || 1) + 1;
             } else {
-                // Создаем новый баф
                 activePowerups[type] = {
                     expires: now + duration,
                     count: 1
                 };
                 
-                // Применяем эффект только при первом активировании
                 applyPowerupEffect(type);
             }
             
-            // Устанавливаем таймер для снятия эффекта
             setTimeout(() => {
                 if (activePowerups[type] && now + duration <= activePowerups[type].expires) {
                     deactivatePowerup(type);
@@ -911,11 +1194,11 @@
                     break;
                 case 'multi':
                     if (balls.length < 5) {
-                        // Создаем 2 дополнительных мяча вместо 1
                         for (let i = 0; i < 2 && balls.length < 5; i++) {
                             const newBall = {...balls[0]};
                             newBall.dx = -newBall.dx * (0.8 + Math.random() * 0.4);
                             newBall.color = ballColors[(currentBallColorIndex + 1) % ballColors.length];
+                            newBall.trail = [];
                             balls.push(newBall);
                         }
                     }
@@ -933,7 +1216,6 @@
                     break;
                 case 'slow':
                 case 'fast':
-                    // Возвращаем исходную скорость мячей
                     const currentSpeed = getBallSpeed(currentLevel);
                     balls.forEach(ball => {
                         const speed = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
@@ -968,36 +1250,60 @@
             ctx.clearRect(0, 0, WIDTH, HEIGHT);
             
             drawBackground();
+            drawParticles();
+            drawPortals();
             drawPlatform();
-            balls.forEach(ball => drawBall(ball));
-            powerups.forEach(powerup => drawPowerup(powerup));
-            bombs.forEach(bomb => drawBomb(bomb));
+            drawBalls();
+            drawPowerups();
+            drawBombs();
         }
 
         function drawBackground() {
-            // Выбираем фон в зависимости от уровня
-            let background = images.background1;
+            const theme = config.LEVEL_SETTINGS[currentLevel].theme;
+            const colors = THEME_COLORS[theme] || THEME_COLORS.air;
             
-            if (currentLevel >= 14 && images.background14) {
-                background = images.background14;
-            } else if (currentLevel >= 10 && images.background10) {
-                background = images.background10;
-            } else if (currentLevel >= 6 && images.background6) {
-                background = images.background6;
-            } else if (currentLevel >= 3 && images.background3) {
-                background = images.background3;
-            }
+            // Плавный градиентный фон
+            const gradient = ctx.createLinearGradient(0, 0, WIDTH, HEIGHT);
+            gradient.addColorStop(0, colors[0]);
+            gradient.addColorStop(0.5, colors[1]);
+            gradient.addColorStop(1, colors[2]);
             
-            if (background) {
-                ctx.drawImage(background, 0, 0, WIDTH, HEIGHT);
-            } else {
-                // Запасной фон
-                ctx.fillStyle = currentLevel >= 14 ? '#0c2461' : 
-                               currentLevel >= 10 ? '#b71540' : 
-                               currentLevel >= 6 ? '#3c6382' : 
-                               currentLevel >= 3 ? '#e55039' : '#1e3799';
-                ctx.fillRect(0, 0, WIDTH, HEIGHT);
-            }
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, WIDTH, HEIGHT);
+        }
+
+        function drawParticles() {
+            particles.forEach(particle => {
+                ctx.globalAlpha = particle.life;
+                ctx.fillStyle = particle.color;
+                ctx.beginPath();
+                ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+        }
+
+        function drawPortals() {
+            portals.forEach(portal => {
+                ctx.save();
+                ctx.translate(portal.x, portal.y);
+                ctx.rotate(portal.rotation);
+                
+                // Внешний круг портала
+                ctx.strokeStyle = '#9C27B0';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(0, 0, portal.size / 2, 0, Math.PI * 2);
+                ctx.stroke();
+                
+                // Внутренний круг
+                ctx.fillStyle = 'rgba(156, 39, 176, 0.3)';
+                ctx.beginPath();
+                ctx.arc(0, 0, portal.size / 3, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.restore();
+            });
         }
 
         function drawPlatform() {
@@ -1011,16 +1317,51 @@
             ctx.fillRect(platform.x, platform.y, platform.width, 2);
         }
 
-        function drawBall(ball) {
-            ctx.fillStyle = ball.color;
-            ctx.beginPath();
-            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-            ctx.fill();
+        function drawBalls() {
+            balls.forEach(ball => {
+                // Рисуем след
+                ball.trail.forEach((point, index) => {
+                    const alpha = index / ball.trail.length * 0.5;
+                    ctx.globalAlpha = alpha;
+                    ctx.fillStyle = ball.color;
+                    ctx.beginPath();
+                    ctx.arc(point.x, point.y, ball.radius * 0.7, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+                ctx.globalAlpha = 1;
+                
+                // Рисуем мяч
+                ctx.fillStyle = ball.type === 'ghost' && ball.ghost ? 
+                    `rgba(${parseInt(ball.color.slice(1,3),16)},${parseInt(ball.color.slice(3,5),16)},${parseInt(ball.color.slice(5,7),16)},0.5)` : 
+                    ball.color;
+                ctx.beginPath();
+                ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+                ctx.fill();
 
-            ctx.fillStyle = '#E0FFFF';
-            ctx.beginPath();
-            ctx.arc(ball.x - ball.radius/3, ball.y - ball.radius/3, ball.radius/2, 0, Math.PI * 2);
-            ctx.fill();
+                // Блики на мяче
+                ctx.fillStyle = '#E0FFFF';
+                ctx.beginPath();
+                ctx.arc(ball.x - ball.radius/3, ball.y - ball.radius/3, ball.radius/2, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Индикатор типа мяча
+                if (ball.type !== 'normal') {
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.font = `bold ${ball.radius}px Arial`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    
+                    let symbol = '●';
+                    switch(ball.type) {
+                        case 'sticky': symbol = 'S'; break;
+                        case 'split': symbol = 'D'; break;
+                        case 'magnetic': symbol = 'M'; break;
+                        case 'ghost': symbol = 'G'; break;
+                    }
+                    
+                    ctx.fillText(symbol, ball.x, ball.y);
+                }
+            });
         }
 
         function drawPowerup(powerup) {
@@ -1042,18 +1383,14 @@
         }
 
         function drawBomb(bomb) {
-            // Анимация пульсации - изменяем размер бомбы
             const pulseScale = 1 + 0.1 * Math.sin(bomb.pulsePhase);
             const currentSize = bomb.size * pulseScale;
-            const offset = (bomb.size - currentSize) / 2;
             
-            // Рисуем бомбу с шипами
             ctx.fillStyle = bomb.color;
             ctx.beginPath();
             ctx.arc(bomb.x + bomb.size/2, bomb.y + bomb.size/2, currentSize/2, 0, Math.PI * 2);
             ctx.fill();
             
-            // Шипы (также пульсируют)
             ctx.strokeStyle = '#FF0000';
             ctx.lineWidth = 2;
             for (let i = 0; i < 8; i++) {
@@ -1070,7 +1407,6 @@
                 ctx.stroke();
             }
             
-            // Символ бомбы
             ctx.fillStyle = '#FFFFFF';
             const fontSize = Math.max(12, currentSize * 0.4);
             ctx.font = `bold ${fontSize}px Arial`;
@@ -1078,7 +1414,6 @@
             ctx.textBaseline = 'middle';
             ctx.fillText('!', bomb.x + bomb.size/2, bomb.y + bomb.size/2);
             
-            // Красное свечение
             ctx.shadowColor = '#FF0000';
             ctx.shadowBlur = 15;
             ctx.beginPath();
@@ -1097,10 +1432,7 @@
             document.getElementById('finalLevel').textContent = currentLevel;
             document.getElementById('gameOver').style.display = 'flex';
             
-            // Обновляем таблицу рекордов
             updateHighScoresDisplay();
-            
-            // Проверяем, побит ли рекорд
             checkNewHighScore();
         }
 
