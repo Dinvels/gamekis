@@ -172,8 +172,6 @@
         
         <div id="ui">
             <div>🐱 Счет: <span id="score">0</span></div>
-            <div>🎯 Уровень: <span id="level">1</span></div>
-            <div>⚡ Мячи: <span id="balls">1</span></div>
         </div>
         
         <div id="touchControls">
@@ -218,12 +216,18 @@
                 7: { speed: 19.0, bouncesNeeded: 24 },
                 8: { speed: 21.0, bouncesNeeded: 24 },
                 9: { speed: 23.0, bouncesNeeded: 24 },
-                10: { speed: 25.0, bouncesNeeded: 9999 }
+                10: { speed: 25.0, bouncesNeeded: 24 },
+                11: { speed: 27.0, bouncesNeeded: 24 },
+                12: { speed: 29.0, bouncesNeeded: 24 },
+                13: { speed: 31.0, bouncesNeeded: 24 },
+                14: { speed: 33.0, bouncesNeeded: 24 },
+                15: { speed: 35.0, bouncesNeeded: 9999 }
             },
             POWERUP_CHANCE: 0.3,
             POWERUP_TYPES: ["expand", "shrink", "slow", "fast", "multi", "bomb"],
-            POWERUP_DURATION: 6000,
-            BOMB_CHANCE: 0.1
+            POWERUP_DURATION: 5000, // 5 секунд
+            BOMB_CHANCE: 0.1,
+            BOMB_CHANCE_AFTER_70: 0.25 // Увеличиваем шанс бомб после 70 очков
         };
 
         // Игровые переменные
@@ -237,6 +241,7 @@
         let lastTime = 0;
         let gameStarted = false;
         let bombAnimationTime = 0;
+        let originalPlatformY = 0;
         
         // Размеры canvas (будут установлены при инициализации)
         let WIDTH, HEIGHT;
@@ -256,7 +261,10 @@
         // Загрузка ресурсов
         const images = {
             background1: null,
-            background3: null
+            background3: null,
+            background6: null,
+            background10: null,
+            background14: null
         };
         
         const sounds = {
@@ -346,6 +354,9 @@
                 // Загрузка фоновых изображений
                 images.background1 = await loadImage('generated_image_20251128184952.jpg');
                 images.background3 = await loadImage('1212.jpg');
+                images.background6 = await loadImage('4.jpg');
+                images.background10 = await loadImage('3.jpg');
+                images.background14 = await loadImage('2.jpg');
                 
                 // Загрузка звуков
                 sounds.hit = new Audio('DP2_Gang_Rim_Hit.wav');
@@ -375,31 +386,26 @@
 
         function createFallbackBackgrounds() {
             // Создаем запасные градиентные фоны
-            const canvas1 = document.createElement('canvas');
-            canvas1.width = 800;
-            canvas1.height = 600;
-            const ctx1 = canvas1.getContext('2d');
+            const createGradientBackground = (color1, color2) => {
+                const canvas = document.createElement('canvas');
+                canvas.width = 800;
+                canvas.height = 600;
+                const ctx = canvas.getContext('2d');
+                
+                const gradient = ctx.createLinearGradient(0, 0, 800, 600);
+                gradient.addColorStop(0, color1);
+                gradient.addColorStop(1, color2);
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, 800, 600);
+                
+                return canvas;
+            };
             
-            const gradient1 = ctx1.createLinearGradient(0, 0, 800, 600);
-            gradient1.addColorStop(0, '#0c2461');
-            gradient1.addColorStop(1, '#1e3799');
-            ctx1.fillStyle = gradient1;
-            ctx1.fillRect(0, 0, 800, 600);
-            
-            images.background1 = canvas1;
-            
-            const canvas3 = document.createElement('canvas');
-            canvas3.width = 800;
-            canvas3.height = 600;
-            const ctx3 = canvas3.getContext('2d');
-            
-            const gradient3 = ctx3.createLinearGradient(0, 0, 800, 600);
-            gradient3.addColorStop(0, '#e55039');
-            gradient3.addColorStop(1, '#eb2f06');
-            ctx3.fillStyle = gradient3;
-            ctx3.fillRect(0, 0, 800, 600);
-            
-            images.background3 = canvas3;
+            images.background1 = createGradientBackground('#0c2461', '#1e3799');
+            images.background3 = createGradientBackground('#e55039', '#eb2f06');
+            images.background6 = createGradientBackground('#3c6382', '#0a3d62');
+            images.background10 = createGradientBackground('#b71540', '#eb2f06');
+            images.background14 = createGradientBackground('#0c2461', '#3c6382');
         }
 
         function setupControls() {
@@ -491,13 +497,17 @@
             
             const baseSpeed = WIDTH * 0.02;
             
+            // Изначальная позиция платформы (внизу экрана)
+            originalPlatformY = HEIGHT - platformHeight - 20;
+            
             platform = {
                 width: platformWidth,
                 height: platformHeight,
                 x: WIDTH / 2 - platformWidth / 2,
-                y: HEIGHT - platformHeight - 20,
+                y: originalPlatformY,
                 speed: baseSpeed,
-                color: platformColors[currentPlatformColorIndex]
+                color: platformColors[currentPlatformColorIndex],
+                originalY: originalPlatformY
             };
 
             const ballRadius = Math.max(10, Math.min(20, WIDTH * 0.02));
@@ -557,6 +567,22 @@
             if (balls.length === 0) {
                 endGame();
             }
+            
+            // Обновляем позицию платформы в зависимости от счета
+            updatePlatformPosition();
+        }
+
+        function updatePlatformPosition() {
+            // Поднимаем платформу каждые 50 очков, но не более чем на 30% от высоты экрана
+            const maxLift = HEIGHT * 0.3;
+            const liftIncrement = maxLift / 10; // 10 ступеней до максимума
+            
+            // Определяем, на сколько поднять платформу
+            const scoreLift = Math.floor(score / 50) * liftIncrement;
+            const finalLift = Math.min(maxLift, scoreLift);
+            
+            // Обновляем позицию платформы
+            platform.y = originalPlatformY - finalLift;
         }
 
         function updateBall(ball, ballIndex) {
@@ -620,8 +646,10 @@
             changeColors();
 
             // Создание бонусов и бомб
+            const currentBombChance = score >= 70 ? config.BOMB_CHANCE_AFTER_70 : config.BOMB_CHANCE;
+            
             if (Math.random() < config.POWERUP_CHANCE && powerups.length < 3) {
-                createPowerup();
+                createPowerup(currentBombChance);
             }
 
             playHitSound();
@@ -650,12 +678,12 @@
             }, 2000);
         }
 
-        function createPowerup() {
+        function createPowerup(bombChance) {
             const powerupSize = Math.max(15, WIDTH * 0.03);
             let type;
             
             // Шанс создания бомбы
-            if (Math.random() < config.BOMB_CHANCE) {
+            if (Math.random() < bombChance) {
                 type = "bomb";
             } else {
                 type = config.POWERUP_TYPES[Math.floor(Math.random() * (config.POWERUP_TYPES.length - 1))];
@@ -736,7 +764,7 @@
         function updatePowerups() {
             const now = Date.now();
             Object.keys(activePowerups).forEach(type => {
-                if (now > activePowerups[type]) {
+                if (now > activePowerups[type].expires) {
                     deactivatePowerup(type);
                     delete activePowerups[type];
                 }
@@ -744,9 +772,34 @@
         }
 
         function activatePowerup(type) {
+            const now = Date.now();
             const duration = config.POWERUP_DURATION;
-            activePowerups[type] = Date.now() + duration;
+            
+            // Если баф уже активен, продлеваем время и увеличиваем счетчик
+            if (activePowerups[type]) {
+                activePowerups[type].expires = now + duration;
+                activePowerups[type].count = (activePowerups[type].count || 1) + 1;
+            } else {
+                // Создаем новый баф
+                activePowerups[type] = {
+                    expires: now + duration,
+                    count: 1
+                };
+                
+                // Применяем эффект только при первом активировании
+                applyPowerupEffect(type);
+            }
+            
+            // Устанавливаем таймер для снятия эффекта
+            setTimeout(() => {
+                if (activePowerups[type] && now + duration <= activePowerups[type].expires) {
+                    deactivatePowerup(type);
+                    delete activePowerups[type];
+                }
+            }, duration);
+        }
 
+        function applyPowerupEffect(type) {
             const maxPlatformWidth = WIDTH * 0.4;
             
             switch(type) {
@@ -780,8 +833,6 @@
                     }
                     break;
             }
-            
-            updateUI();
         }
 
         function deactivatePowerup(type) {
@@ -794,6 +845,13 @@
                     break;
                 case 'slow':
                 case 'fast':
+                    // Возвращаем исходную скорость мячей
+                    const currentSpeed = getBallSpeed(currentLevel);
+                    balls.forEach(ball => {
+                        const speed = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
+                        ball.dx = (ball.dx / speed) * currentSpeed;
+                        ball.dy = (ball.dy / speed) * currentSpeed;
+                    });
                     break;
             }
         }
@@ -829,12 +887,27 @@
         }
 
         function drawBackground() {
-            if (currentLevel >= 3 && images.background3) {
-                ctx.drawImage(images.background3, 0, 0, WIDTH, HEIGHT);
-            } else if (images.background1) {
-                ctx.drawImage(images.background1, 0, 0, WIDTH, HEIGHT);
+            // Выбираем фон в зависимости от уровня
+            let background = images.background1;
+            
+            if (currentLevel >= 14 && images.background14) {
+                background = images.background14;
+            } else if (currentLevel >= 10 && images.background10) {
+                background = images.background10;
+            } else if (currentLevel >= 6 && images.background6) {
+                background = images.background6;
+            } else if (currentLevel >= 3 && images.background3) {
+                background = images.background3;
+            }
+            
+            if (background) {
+                ctx.drawImage(background, 0, 0, WIDTH, HEIGHT);
             } else {
-                ctx.fillStyle = currentLevel >= 3 ? '#e55039' : '#1e3799';
+                // Запасной фон
+                ctx.fillStyle = currentLevel >= 14 ? '#0c2461' : 
+                               currentLevel >= 10 ? '#b71540' : 
+                               currentLevel >= 6 ? '#3c6382' : 
+                               currentLevel >= 3 ? '#e55039' : '#1e3799';
                 ctx.fillRect(0, 0, WIDTH, HEIGHT);
             }
         }
@@ -928,8 +1001,6 @@
 
         function updateUI() {
             document.getElementById('score').textContent = score;
-            document.getElementById('level').textContent = currentLevel;
-            document.getElementById('balls').textContent = balls.length;
         }
 
         function endGame() {
