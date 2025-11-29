@@ -162,6 +162,31 @@
             max-width: 80%;
             line-height: 1.5;
         }
+
+        #highScores {
+            position: absolute;
+            top: 20px;
+            right: 100px;
+            color: white;
+            font-size: 18px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            z-index: 10;
+            text-align: right;
+        }
+
+        #highScoresList {
+            margin-top: 5px;
+            font-size: 16px;
+        }
+
+        #initialsInput {
+            margin: 10px;
+            padding: 10px;
+            font-size: 18px;
+            width: 80px;
+            text-align: center;
+            text-transform: uppercase;
+        }
     </style>
 </head>
 <body>
@@ -172,6 +197,11 @@
         
         <div id="ui">
             <div>🐱 Счет: <span id="score">0</span></div>
+        </div>
+        
+        <div id="highScores">
+            <div>🏆 Рекорды:</div>
+            <div id="highScoresList">Загрузка...</div>
         </div>
         
         <div id="touchControls">
@@ -198,6 +228,13 @@
             <h2>ИГРА ОКОНЧЕНА, КИС! 🐱</h2>
             <p>Ваш счет: <span id="finalScore">0</span></p>
             <p>Достигнут уровень: <span id="finalLevel">1</span></p>
+            
+            <div id="newHighScore" style="display: none; margin: 20px 0;">
+                <p>🎉 Новый рекорд! Введите ваши инициалы (3 буквы):</p>
+                <input type="text" id="initialsInput" maxlength="3" placeholder="ABC">
+                <button class="game-btn" onclick="saveHighScore()">💾 Сохранить</button>
+            </div>
+            
             <button class="game-btn" onclick="restartGame()">🎮 Играть снова, кис!</button>
             <button class="game-btn" id="quitBtn" onclick="closeGame()">🚪 Выйти</button>
         </div>
@@ -242,6 +279,7 @@
         let gameStarted = false;
         let bombAnimationTime = 0;
         let originalPlatformY = 0;
+        let highScores = [];
         
         // Размеры canvas (будут установлены при инициализации)
         let WIDTH, HEIGHT;
@@ -273,23 +311,23 @@
             bomb: null
         };
 
-        // Цвета для бонусов и бомб
+        // Цвета для бонусов и бомб - ХОРОШИЕ (зеленые) и ПЛОХИЕ (красные)
         const POWERUP_COLORS = {
-            expand: '#32CD32',
-            shrink: '#DC143C', 
-            slow: '#1E90FF',
-            fast: '#FFD700',
-            multi: '#9400D3',
-            bomb: '#000000'
+            expand: '#4CAF50',    // ХОРОШИЙ - зеленый
+            shrink: '#F44336',    // ПЛОХОЙ - красный
+            slow: '#4CAF50',      // ХОРОШИЙ - зеленый
+            fast: '#F44336',      // ПЛОХОЙ - красный
+            multi: '#4CAF50',     // ХОРОШИЙ - зеленый
+            bomb: '#F44336'       // ПЛОХОЙ - красный
         };
 
         // Символы для бонусов
         const POWERUP_SYMBOLS = {
-            expand: '+',
-            shrink: '-',
-            slow: '↓',
-            fast: '↑',
-            multi: 'x',
+            expand: '📈',
+            shrink: '📉',
+            slow: '🐢',
+            fast: '🐇',
+            multi: '✨',
             bomb: '💣'
         };
 
@@ -308,6 +346,9 @@
         async function init() {
             canvas = document.getElementById('gameCanvas');
             ctx = canvas.getContext('2d');
+            
+            // Загрузка рекордов
+            loadHighScores();
             
             // Установка размеров canvas
             setupCanvasSize();
@@ -408,6 +449,65 @@
             images.background14 = createGradientBackground('#0c2461', '#3c6382');
         }
 
+        // Функции для работы с рекордами
+        function loadHighScores() {
+            const saved = localStorage.getItem('highScores');
+            if (saved) {
+                highScores = JSON.parse(saved);
+            } else {
+                highScores = [
+                    { name: "КИС", score: 100 },
+                    { name: "МУР", score: 75 },
+                    { name: "ПУХ", score: 50 }
+                ];
+            }
+            updateHighScoresDisplay();
+        }
+
+        function saveHighScores() {
+            localStorage.setItem('highScores', JSON.stringify(highScores));
+        }
+
+        function updateHighScoresDisplay() {
+            const list = document.getElementById('highScoresList');
+            list.innerHTML = '';
+            
+            highScores.slice(0, 5).forEach(score => {
+                const div = document.createElement('div');
+                div.textContent = `${score.name}: ${score.score}`;
+                list.appendChild(div);
+            });
+        }
+
+        function checkNewHighScore() {
+            if (highScores.length < 5 || score > highScores[highScores.length - 1].score) {
+                document.getElementById('newHighScore').style.display = 'block';
+                return true;
+            }
+            return false;
+        }
+
+        function saveHighScore() {
+            const initials = document.getElementById('initialsInput').value.toUpperCase().substr(0, 3);
+            if (initials.length === 0) {
+                alert('Пожалуйста, введите 3 буквы!');
+                return;
+            }
+            
+            // Добавляем новый рекорд
+            highScores.push({ name: initials, score: score });
+            
+            // Сортируем по убыванию и оставляем топ-5
+            highScores.sort((a, b) => b.score - a.score);
+            highScores = highScores.slice(0, 5);
+            
+            // Сохраняем и обновляем отображение
+            saveHighScores();
+            updateHighScoresDisplay();
+            
+            document.getElementById('newHighScore').style.display = 'none';
+        }
+
         function setupControls() {
             // Клавиатура (для ПК)
             window.addEventListener('keydown', (e) => {
@@ -497,8 +597,8 @@
             
             const baseSpeed = WIDTH * 0.02;
             
-            // Изначальная позиция платформы (внизу экрана)
-            originalPlatformY = HEIGHT - platformHeight - 20;
+            // Платформа начинается на 15% от нижнего края экрана
+            originalPlatformY = HEIGHT * 0.85 - platformHeight;
             
             platform = {
                 width: platformWidth,
@@ -1008,11 +1108,15 @@
             document.getElementById('finalScore').textContent = score;
             document.getElementById('finalLevel').textContent = currentLevel;
             document.getElementById('gameOver').style.display = 'flex';
+            
+            // Проверяем, побит ли рекорд
+            checkNewHighScore();
         }
 
         function restartGame() {
             document.getElementById('gameOver').style.display = 'none';
             document.getElementById('pauseScreen').style.display = 'none';
+            document.getElementById('newHighScore').style.display = 'none';
             isPaused = false;
             resetGame();
             if (gameStarted) {
