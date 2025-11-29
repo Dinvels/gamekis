@@ -1,3 +1,6 @@
+Вот обновленный код с изменениями:
+
+```html
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -98,6 +101,10 @@
             background: #ff6b6b;
         }
 
+        #quitBtn:hover {
+            background: #ff5252;
+        }
+
         #levelUp {
             position: absolute;
             top: 50%;
@@ -140,16 +147,23 @@
             z-index: 20;
         }
 
+        /* Скрываем кнопки управления */
+        #touchControls {
+            display: none;
+        }
+
         h1 {
             font-size: 48px;
             margin-bottom: 30px;
             color: #ffd700;
+            text-shadow: 0 0 10px rgba(255,215,0,0.5);
         }
 
         p {
             font-size: 24px;
             margin-bottom: 20px;
             max-width: 80%;
+            line-height: 1.5;
         }
 
         #initialsInput {
@@ -177,11 +191,16 @@
             <div>🐱 Счет: <span id="score">0</span></div>
         </div>
         
+        <div id="touchControls">
+            <div class="touch-btn" id="leftBtn">←</div>
+            <div class="touch-btn" id="rightBtn">→</div>
+        </div>
+        
         <div id="levelUp">УРОВЕНЬ <span id="levelNumber">2</span>!</div>
         
         <div id="startScreen">
             <h1>Поймай мячик, кис! 🐱</h1>
-            <p>Лови мячики, собирай бонусы и избегай бомб!</p>
+            <p>Лови мячики, собирай бонусы и избегай бомб!<br>Управляй платформой с помощью клавиш ← → или касанием экрана.</p>
             <button class="game-btn" onclick="startGame()">Готова, кис? 😼</button>
         </div>
         
@@ -203,87 +222,158 @@
             </div>
             
             <div id="newHighScore" style="display: none; margin: 20px 0;">
-                <p>🎉 Новый рекорд! Введите инициалы (3 буквы):</p>
+                <p>🎉 Новый рекорд! Введите ваши инициалы (3 буквы):</p>
                 <input type="text" id="initialsInput" maxlength="3" placeholder="ABC">
                 <button class="game-btn" onclick="saveHighScore()">💾 Сохранить</button>
             </div>
             
-            <button class="game-btn" onclick="restartGame()">🎮 Играть снова</button>
+            <button class="game-btn" onclick="restartGame()">🎮 Играть снова, кис!</button>
             <button class="game-btn" id="quitBtn" onclick="closeGame()">🚪 Выйти</button>
         </div>
     </div>
 
     <script>
-        // Упрощенная конфигурация для стабильности
+        // Конфигурация игры
         const config = {
             LEVEL_SETTINGS: {
-                1: { speed: 7.0, bouncesNeeded: 15, theme: 'air' },
-                2: { speed: 9.0, bouncesNeeded: 15, theme: 'air' },
-                3: { speed: 11.0, bouncesNeeded: 15, theme: 'water' },
-                4: { speed: 13.0, bouncesNeeded: 15, theme: 'water' },
-                5: { speed: 15.0, bouncesNeeded: 15, theme: 'earth' }
+                1: { speed: 7.0, bouncesNeeded: 24 },
+                2: { speed: 9.0, bouncesNeeded: 24 },
+                3: { speed: 11.0, bouncesNeeded: 24 },
+                4: { speed: 13.0, bouncesNeeded: 24 },
+                5: { speed: 15.0, bouncesNeeded: 24 },
+                6: { speed: 17.0, bouncesNeeded: 24 },
+                7: { speed: 19.0, bouncesNeeded: 24 },
+                8: { speed: 21.0, bouncesNeeded: 24 },
+                9: { speed: 23.0, bouncesNeeded: 24 },
+                10: { speed: 25.0, bouncesNeeded: 24 },
+                11: { speed: 27.0, bouncesNeeded: 24 },
+                12: { speed: 29.0, bouncesNeeded: 24 },
+                13: { speed: 31.0, bouncesNeeded: 24 },
+                14: { speed: 33.0, bouncesNeeded: 24 },
+                15: { speed: 35.0, bouncesNeeded: 9999 }
             },
-            POWERUP_CHANCE: 0.2,
-            POWERUP_DURATION: 5000,
-            BOMB_CHANCE: 0.08,
-            PORTAL_CHANCE: 0.03,
-            MAX_BALLS: 8,
-            MAX_PARTICLES: 50
+            POWERUP_CHANCE: 0.3,
+            POWERUP_TYPES: ["expand", "shrink", "slow", "fast", "multi", "bomb"],
+            POWERUP_DURATION: 5000, // 5 секунд
+            BOMB_CHANCE: 0.1,
+            BOMB_CHANCE_AFTER_70: 0.25 // Увеличиваем шанс бомб после 70 очков
         };
 
         // Игровые переменные
         let canvas, ctx;
-        let platform, balls = [], powerups = [], bombs = [], portals = [], particles = [];
-        let activePowerups = {};
-        let score = 0, currentLevel = 1, bouncesInCurrentLevel = 0;
-        let gameOver = false, isPaused = false, gameStarted = false;
-        let lastTime = 0, originalPlatformY = 0;
-        let highScores = [], keys = {};
-        let platformVelocity = 0, animationId = null;
-
+        let platform, balls, powerups, activePowerups, bombs;
+        let score = 0;
+        let currentLevel = 1;
+        let bouncesInCurrentLevel = 0;
+        let gameOver = false;
+        let isPaused = false;
+        let lastTime = 0;
+        let gameStarted = false;
+        let bombAnimationTime = 0;
+        let originalPlatformY = 0;
+        let highScores = [];
+        
+        // Размеры canvas (будут установлены при инициализации)
         let WIDTH, HEIGHT;
         
-        // Цвета
-        const platformColors = ['#FFB6C1', '#ADD8E6', '#98FB98'];
-        const ballColors = ['#ADD8E6', '#FFB6C1', '#98FB98'];
-        const POWERUP_COLORS = {
-            expand: '#4CAF50', shrink: '#F44336', slow: '#4CAF50', 
-            fast: '#F44336', multi: '#4CAF50', bomb: '#F44336'
+        // Определение устройства
+        let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        // Множитель скорости для мобильных устройств
+        const MOBILE_SPEED_MULTIPLIER = 1.0;
+        
+        // Цвета для платформы и мячей
+        const platformColors = ['#FFB6C1', '#ADD8E6', '#98FB98', '#DDA0DD', '#F0E68C', '#FFA07A', '#87CEEB', '#FFD700'];
+        const ballColors = ['#ADD8E6', '#FFB6C1', '#98FB98', '#DDA0DD', '#F0E68C', '#87CEEB', '#FFA07A', '#FFD700'];
+        let currentPlatformColorIndex = 0;
+        let currentBallColorIndex = 0;
+        
+        // Загрузка ресурсов
+        const images = {
+            background1: null,
+            background3: null,
+            background6: null,
+            background10: null,
+            background14: null
         };
-        const POWERUP_SYMBOLS = {
-            expand: '+', shrink: '-', slow: '↓', fast: '↑', multi: 'x2', bomb: '!'
-        };
-        const THEME_COLORS = {
-            air: ['#87CEEB', '#E0F7FA', '#B3E5FC'],
-            water: ['#1E88E5', '#4FC3F7', '#80DEEA'],
-            earth: ['#795548', '#8D6E63', '#A1887F']
+        
+        const sounds = {
+            hit: null,
+            music: null,
+            bomb: null
         };
 
-        // Основные функции
-        function init() {
+        // Цвета для бонусов и бомб - ХОРОШИЕ (зеленые) и ПЛОХИЕ (красные)
+        const POWERUP_COLORS = {
+            expand: '#4CAF50',    // ХОРОШИЙ - зеленый
+            shrink: '#F44336',    // ПЛОХОЙ - красный
+            slow: '#4CAF50',      // ХОРОШИЙ - зеленый
+            fast: '#F44336',      // ПЛОХОЙ - красный
+            multi: '#4CAF50',     // ХОРОШИЙ - зеленый
+            bomb: '#F44336'       // ПЛОХОЙ - красный
+        };
+
+        // Символы для бонусов (без эмодзи)
+        const POWERUP_SYMBOLS = {
+            expand: '+',
+            shrink: '-',
+            slow: '↓',
+            fast: '↑',
+            multi: 'x2',
+            bomb: '!'
+        };
+
+        // Функция для получения скорости с учетом типа устройства
+        function getBallSpeed(level) {
+            let baseSpeed = config.LEVEL_SETTINGS[level].speed * (WIDTH / 800);
+            if (isMobile) {
+                // На мобильных устройствах начинаем с 10 и увеличиваем
+                const mobileBaseSpeed = 10 + (level - 1) * 2;
+                return mobileBaseSpeed * (WIDTH / 800) * MOBILE_SPEED_MULTIPLIER;
+            }
+            return baseSpeed;
+        }
+
+        // Инициализация игры
+        async function init() {
             canvas = document.getElementById('gameCanvas');
             ctx = canvas.getContext('2d');
             
+            // Загрузка рекордов
             loadHighScores();
+            
+            // Установка размеров canvas
             setupCanvasSize();
+            
+            // Загрузка ресурсов
+            await loadResources();
+            
+            // Настройка управления
             setupControls();
             
+            // Показываем начальный экран
             document.getElementById('startScreen').style.display = 'flex';
+            
+            // Запуск музыки
+            playBackgroundMusic();
         }
 
         function startGame() {
             document.getElementById('startScreen').style.display = 'none';
             gameStarted = true;
             resetGame();
-            gameLoop();
+            requestAnimationFrame(gameLoop);
         }
 
         function setupCanvasSize() {
+            // Устанавливаем размеры canvas равными размеру окна
             WIDTH = window.innerWidth;
             HEIGHT = window.innerHeight;
+            
             canvas.width = WIDTH;
             canvas.height = HEIGHT;
             
+            // Обработка изменения размера окна
             window.addEventListener('resize', () => {
                 WIDTH = window.innerWidth;
                 HEIGHT = window.innerHeight;
@@ -292,34 +382,176 @@
             });
         }
 
+        async function loadResources() {
+            try {
+                // Загрузка фоновых изображений
+                images.background1 = await loadImage('generated_image_20251128184952.jpg');
+                images.background3 = await loadImage('1212.jpg');
+                images.background6 = await loadImage('4.jpg');
+                images.background10 = await loadImage('3.jpg');
+                images.background14 = await loadImage('2.jpg');
+                
+                // Загрузка звуков
+                sounds.hit = new Audio('DP2_Gang_Rim_Hit.wav');
+                sounds.music = new Audio('U.mp3');
+                sounds.bomb = new Audio('DP2_Gang_Rim_Hit.wav');
+                
+                sounds.hit.volume = 0.7;
+                sounds.music.volume = 0.5;
+                sounds.music.loop = true;
+                sounds.bomb.volume = 0.8;
+                
+            } catch (error) {
+                console.log("Некоторые ресурсы не загружены, игра продолжается без них");
+                // Создаем запасные фоны
+                createFallbackBackgrounds();
+            }
+        }
+
+        function loadImage(src) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = reject;
+                img.src = src;
+            });
+        }
+
+        function createFallbackBackgrounds() {
+            // Создаем запасные градиентные фоны
+            const createGradientBackground = (color1, color2) => {
+                const canvas = document.createElement('canvas');
+                canvas.width = 800;
+                canvas.height = 600;
+                const ctx = canvas.getContext('2d');
+                
+                const gradient = ctx.createLinearGradient(0, 0, 800, 600);
+                gradient.addColorStop(0, color1);
+                gradient.addColorStop(1, color2);
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, 800, 600);
+                
+                return canvas;
+            };
+            
+            images.background1 = createGradientBackground('#0c2461', '#1e3799');
+            images.background3 = createGradientBackground('#e55039', '#eb2f06');
+            images.background6 = createGradientBackground('#3c6382', '#0a3d62');
+            images.background10 = createGradientBackground('#b71540', '#eb2f06');
+            images.background14 = createGradientBackground('#0c2461', '#3c6382');
+        }
+
+        // Функции для работы с рекордами
+        function loadHighScores() {
+            const saved = localStorage.getItem('highScores');
+            if (saved) {
+                highScores = JSON.parse(saved);
+            } else {
+                highScores = [
+                    { name: "КИС", score: 100 },
+                    { name: "МУР", score: 75 },
+                    { name: "ПУХ", score: 50 }
+                ];
+            }
+        }
+
+        function saveHighScores() {
+            localStorage.setItem('highScores', JSON.stringify(highScores));
+        }
+
+        function updateHighScoresDisplay() {
+            const list = document.getElementById('highScoresList');
+            list.innerHTML = '';
+            
+            highScores.slice(0, 5).forEach(score => {
+                const div = document.createElement('div');
+                div.textContent = `${score.name}: ${score.score}`;
+                list.appendChild(div);
+            });
+        }
+
+        function checkNewHighScore() {
+            if (highScores.length < 5 || score > highScores[highScores.length - 1].score) {
+                document.getElementById('newHighScore').style.display = 'block';
+                return true;
+            }
+            return false;
+        }
+
+        function saveHighScore() {
+            const initials = document.getElementById('initialsInput').value.toUpperCase().substr(0, 3);
+            if (initials.length === 0) {
+                alert('Пожалуйста, введите 3 буквы!');
+                return;
+            }
+            
+            // Добавляем новый рекорд
+            highScores.push({ name: initials, score: score });
+            
+            // Сортируем по убыванию и оставляем топ-5
+            highScores.sort((a, b) => b.score - a.score);
+            highScores = highScores.slice(0, 5);
+            
+            // Сохраняем и обновляем отображение
+            saveHighScores();
+            updateHighScoresDisplay();
+            
+            document.getElementById('newHighScore').style.display = 'none';
+        }
+
         function setupControls() {
-            // Управление клавиатурой
+            // Клавиатура (для ПК)
             window.addEventListener('keydown', (e) => {
                 if (gameOver || isPaused || !gameStarted) return;
-                keys[e.key] = true;
-                if (e.key === ' ' || e.key === 'Escape') togglePause();
+                
+                if (e.key === 'ArrowLeft') {
+                    platform.x = Math.max(0, platform.x - platform.speed * 3);
+                } else if (e.key === 'ArrowRight') {
+                    platform.x = Math.min(WIDTH - platform.width, platform.x + platform.speed * 3);
+                } else if (e.key === ' ' || e.key === 'Escape') {
+                    togglePause();
+                }
             });
             
-            window.addEventListener('keyup', (e) => {
-                keys[e.key] = false;
-            });
-
-            // Сенсорное управление
+            // Сенсорное управление (для мобильных)
             let touchStartX = 0;
+            let isMoving = false;
+            
             canvas.addEventListener('touchstart', (e) => {
                 if (isPaused || !gameStarted) return;
                 touchStartX = e.touches[0].clientX;
+                isMoving = true;
                 e.preventDefault();
             });
             
             canvas.addEventListener('touchmove', (e) => {
-                if (gameOver || isPaused || !gameStarted) return;
+                if (!isMoving || gameOver || isPaused || !gameStarted) return;
+                
                 const touchX = e.touches[0].clientX;
                 const gameX = touchX * (WIDTH / window.innerWidth);
+                
                 platform.x = Math.max(0, Math.min(WIDTH - platform.width, gameX - platform.width / 2));
+                
                 e.preventDefault();
             });
-
+            
+            canvas.addEventListener('touchend', () => {
+                isMoving = false;
+            });
+            
+            // Двойное касание для паузы на мобильных
+            let lastTouchTime = 0;
+            canvas.addEventListener('touchend', (e) => {
+                if (gameOver || !gameStarted) return;
+                const currentTime = new Date().getTime();
+                const timeDiff = currentTime - lastTouchTime;
+                if (timeDiff < 300 && timeDiff > 0) {
+                    togglePause();
+                }
+                lastTouchTime = currentTime;
+            });
+            
+            // Кнопка паузы
             document.getElementById('pauseBtn').addEventListener('click', togglePause);
         }
 
@@ -329,395 +561,341 @@
             isPaused = !isPaused;
             if (isPaused) {
                 document.getElementById('pauseScreen').style.display = 'flex';
-                cancelAnimationFrame(animationId);
+                if (sounds.music) {
+                    sounds.music.pause();
+                }
             } else {
                 document.getElementById('pauseScreen').style.display = 'none';
-                gameLoop();
+                if (sounds.music) {
+                    sounds.music.play().catch(e => console.log("Не удалось возобновить музыку"));
+                }
+                requestAnimationFrame(gameLoop);
             }
         }
 
+        function resumeGame() {
+            isPaused = false;
+            document.getElementById('pauseScreen').style.display = 'none';
+            if (sounds.music) {
+                sounds.music.play().catch(e => console.log("Не удалось возобновить музыку"));
+            }
+            requestAnimationFrame(gameLoop);
+        }
+
         function resetGame() {
-            // Сброс всех массивов
-            balls = [];
-            powerups = [];
-            bombs = [];
-            portals = [];
-            particles = [];
-            activePowerups = {};
-            
-            // Платформа
             const platformWidth = Math.min(150, WIDTH * 0.2);
-            originalPlatformY = HEIGHT * 0.85 - 20;
+            const platformHeight = Math.max(15, HEIGHT * 0.02);
+            
+            const baseSpeed = WIDTH * 0.02;
+            
+            // Платформа начинается на 15% от нижнего края экрана
+            originalPlatformY = HEIGHT * 0.85 - platformHeight;
             
             platform = {
                 width: platformWidth,
-                height: 20,
+                height: platformHeight,
                 x: WIDTH / 2 - platformWidth / 2,
                 y: originalPlatformY,
-                speed: WIDTH * 0.02,
-                color: platformColors[0]
+                speed: baseSpeed,
+                color: platformColors[currentPlatformColorIndex],
+                originalY: originalPlatformY
             };
 
-            // Первый мяч
-            const ballRadius = Math.max(10, WIDTH * 0.02);
-            balls.push({
+            const ballRadius = Math.max(10, Math.min(20, WIDTH * 0.02));
+            const angle = Math.random() * Math.PI/2 + Math.PI/4;
+            const speed = getBallSpeed(1);
+            
+            balls = [{
                 x: WIDTH / 2,
                 y: HEIGHT / 3,
                 radius: ballRadius,
-                dx: 7 * (WIDTH / 800),
-                dy: 7 * (WIDTH / 800),
-                color: ballColors[0],
-                type: 'normal',
-                trail: []
-            });
+                dx: Math.cos(angle) * speed,
+                dy: Math.sin(angle) * speed,
+                color: ballColors[currentBallColorIndex]
+            }];
 
-            // Сброс состояния
+            powerups = [];
+            bombs = [];
+            activePowerups = {};
             score = 0;
             currentLevel = 1;
             bouncesInCurrentLevel = 0;
             gameOver = false;
             isPaused = false;
-            platformVelocity = 0;
-            keys = {};
+            bombAnimationTime = 0;
 
             updateUI();
         }
 
         function gameLoop(timestamp) {
             if (!lastTime) lastTime = timestamp;
-            const deltaTime = Math.min(timestamp - lastTime, 1000/30);
+            const deltaTime = timestamp - lastTime;
             lastTime = timestamp;
+
+            // Обновляем время анимации бомб
+            bombAnimationTime += deltaTime;
 
             if (!gameOver && !isPaused && gameStarted) {
                 update(deltaTime);
                 render();
-                animationId = requestAnimationFrame(gameLoop);
+                requestAnimationFrame(gameLoop);
             }
         }
 
         function update(deltaTime) {
-            updatePlatform(deltaTime);
-            updateBalls(deltaTime);
             updatePowerups();
             updateBombs();
-            updatePortals();
-            updateParticles(deltaTime);
             
-            // Проверка конца игры
+            balls.forEach((ball, index) => {
+                updateBall(ball, index);
+            });
+
+            updatePowerupsMovement();
+            updateBombsMovement();
+
+            balls = balls.filter(ball => ball.y - ball.radius <= HEIGHT);
+
             if (balls.length === 0) {
                 endGame();
-                return;
             }
             
+            // Обновляем позицию платформы в зависимости от счета
             updatePlatformPosition();
-            
-            // Случайные события
-            if (Math.random() < config.PORTAL_CHANCE && portals.length < 2) {
-                createPortal();
-            }
-            if (Math.random() < config.POWERUP_CHANCE && powerups.length < 2) {
-                createPowerup();
-            }
         }
 
-        function updatePlatform(deltaTime) {
-            const acceleration = 0.001 * deltaTime;
-            const friction = 0.92;
+        function updatePlatformPosition() {
+            // Поднимаем платформу каждые 50 очков, но не более чем на 30% от высоты экрана
+            const maxLift = HEIGHT * 0.3;
+            const liftIncrement = maxLift / 10; // 10 ступеней до максимума
             
-            if (keys['ArrowLeft']) platformVelocity -= acceleration;
-            if (keys['ArrowRight']) platformVelocity += acceleration;
+            // Определяем, на сколько поднять платформу
+            const scoreLift = Math.floor(score / 50) * liftIncrement;
+            const finalLift = Math.min(maxLift, scoreLift);
             
-            platformVelocity *= friction;
-            platformVelocity = Math.max(-platform.speed, Math.min(platform.speed, platformVelocity));
-            
-            platform.x += platformVelocity * deltaTime;
-            platform.x = Math.max(0, Math.min(WIDTH - platform.width, platform.x));
-            
-            // Пыль при движении
-            if (Math.abs(platformVelocity) > 0.1 && particles.length < config.MAX_PARTICLES) {
-                createDustParticles();
-            }
+            // Обновляем позицию платформы
+            platform.y = originalPlatformY - finalLift;
         }
 
-        function updateBalls(deltaTime) {
-            balls.forEach(ball => {
-                // След (ограниченной длины)
-                ball.trail.push({x: ball.x, y: ball.y});
-                if (ball.trail.length > 8) ball.trail.shift();
+        function updateBall(ball, ballIndex) {
+            ball.x += ball.dx;
+            ball.y += ball.dy;
+
+            if (ball.x - ball.radius <= 0 || ball.x + ball.radius >= WIDTH) {
+                ball.dx = -ball.dx;
+                ball.x = Math.max(ball.radius, Math.min(WIDTH - ball.radius, ball.x));
+            }
+
+            if (ball.y - ball.radius <= 0) {
+                ball.dy = -ball.dy;
+                ball.y = ball.radius;
+            }
+
+            if (ball.y + ball.radius >= platform.y && 
+                ball.y - ball.radius <= platform.y + platform.height &&
+                ball.x >= platform.x && 
+                ball.x <= platform.x + platform.width) {
                 
-                // Движение
-                ball.x += ball.dx * (deltaTime / 16);
-                ball.y += ball.dy * (deltaTime / 16);
-
-                // Стены
-                if (ball.x - ball.radius <= 0 || ball.x + ball.radius >= WIDTH) {
-                    ball.dx = -ball.dx;
-                    ball.x = Math.max(ball.radius, Math.min(WIDTH - ball.radius, ball.x));
-                    createCollisionParticles(ball.x, ball.y, ball.color);
-                }
-
-                if (ball.y - ball.radius <= 0) {
-                    ball.dy = -ball.dy;
-                    ball.y = ball.radius;
-                    createCollisionParticles(ball.x, ball.y, ball.color);
-                }
-
-                // Платформа
-                if (ball.y + ball.radius >= platform.y && 
-                    ball.y - ball.radius <= platform.y + platform.height &&
-                    ball.x >= platform.x && 
-                    ball.x <= platform.x + platform.width) {
-                    handlePlatformCollision(ball);
-                }
-                
-                // Портал
-                checkPortalCollision(ball);
-            });
-            
-            // Проверка столкновений мячей (только если их немного)
-            if (balls.length <= 6) {
-                checkBallCollisions();
+                handlePlatformCollision(ball);
             }
-        }
-
-        function checkBallCollisions() {
-            for (let i = 0; i < balls.length; i++) {
-                for (let j = i + 1; j < balls.length; j++) {
-                    const ball1 = balls[i];
-                    const ball2 = balls[j];
-                    
-                    const dx = ball2.x - ball1.x;
-                    const dy = ball2.y - ball1.y;
-                    const distance = Math.sqrt(dx*dx + dy*dy);
-                    
-                    if (distance < ball1.radius + ball2.radius) {
-                        handleBallCollision(ball1, ball2);
-                        createCollisionParticles(
-                            (ball1.x + ball2.x) / 2, 
-                            (ball1.y + ball2.y) / 2,
-                            ball1.color
-                        );
-                    }
-                }
-            }
-        }
-
-        function handleBallCollision(ball1, ball2) {
-            const dx = ball2.x - ball1.x;
-            const dy = ball2.y - ball1.y;
-            const distance = Math.sqrt(dx*dx + dy*dy);
-            
-            const nx = dx / distance;
-            const ny = dy / distance;
-            
-            const dvx = ball2.dx - ball1.dx;
-            const dvy = ball2.dy - ball1.dy;
-            const speed = dvx * nx + dvy * ny;
-            
-            if (speed > 0) return;
-            
-            const impulse = 1.8 * speed / (1/ball1.radius + 1/ball2.radius);
-            
-            ball1.dx += impulse * nx / ball1.radius;
-            ball1.dy += impulse * ny / ball1.radius;
-            ball2.dx -= impulse * nx / ball2.radius;
-            ball2.dy -= impulse * ny / ball2.radius;
-            
-            // Разделение
-            const overlap = (ball1.radius + ball2.radius - distance) / 2;
-            ball1.x -= overlap * nx;
-            ball1.y -= overlap * ny;
-            ball2.x += overlap * nx;
-            ball2.y += overlap * ny;
         }
 
         function handlePlatformCollision(ball) {
-            const relativeX = (platform.x + platform.width / 2) - ball.x;
-            const normalizedX = relativeX / (platform.width / 2);
+            const relativeIntersectX = (platform.x + platform.width / 2) - ball.x;
+            const normalizedX = relativeIntersectX / (platform.width / 2);
             const bounceAngle = normalizedX * (Math.PI / 3);
 
-            const speed = config.LEVEL_SETTINGS[currentLevel].speed * (WIDTH / 800);
+            const currentSpeed = getBallSpeed(currentLevel);
             
-            ball.dx = -speed * Math.sin(bounceAngle);
-            ball.dy = -Math.abs(speed * Math.cos(bounceAngle));
+            ball.dx = -currentSpeed * Math.sin(bounceAngle);
+            ball.dy = -Math.abs(currentSpeed * Math.cos(bounceAngle));
 
             score++;
             bouncesInCurrentLevel++;
 
             if (bouncesInCurrentLevel >= config.LEVEL_SETTINGS[currentLevel].bouncesNeeded) {
                 if (currentLevel < Object.keys(config.LEVEL_SETTINGS).length) {
-                    levelUp();
+                    showLevelUp(currentLevel + 1);
+                    currentLevel++;
+                    bouncesInCurrentLevel = 0;
+                    
+                    balls.forEach(b => {
+                        const speed = Math.sqrt(b.dx * b.dx + b.dy * b.dy);
+                        const newSpeed = getBallSpeed(currentLevel);
+                        b.dx = (b.dx / speed) * newSpeed;
+                        b.dy = (b.dy / speed) * newSpeed;
+                    });
                 }
+            }
+
+            const maxPlatformWidth = WIDTH * 0.4;
+            platform.width = Math.min(maxPlatformWidth, Math.min(150, WIDTH * 0.2) * (1 + 0.001 * score));
+            
+            if (platform.x + platform.width > WIDTH) {
+                platform.x = WIDTH - platform.width;
+            }
+
+            changeColors();
+
+            // Создание бонусов и бомб
+            const currentBombChance = score >= 70 ? config.BOMB_CHANCE_AFTER_70 : config.BOMB_CHANCE;
+            
+            if (Math.random() < config.POWERUP_CHANCE && powerups.length < 3) {
+                createPowerup(currentBombChance);
             }
 
             playHitSound();
             updateUI();
         }
 
-        function levelUp() {
-            showLevelUp(currentLevel + 1);
-            currentLevel++;
-            bouncesInCurrentLevel = 0;
+        function changeColors() {
+            currentPlatformColorIndex = (currentPlatformColorIndex + 1) % platformColors.length;
+            platform.color = platformColors[currentPlatformColorIndex];
             
+            currentBallColorIndex = (currentBallColorIndex + 1) % ballColors.length;
             balls.forEach(ball => {
-                const currentSpeed = Math.sqrt(ball.dx*ball.dx + ball.dy*ball.dy);
-                const newSpeed = config.LEVEL_SETTINGS[currentLevel].speed * (WIDTH / 800);
-                ball.dx = (ball.dx / currentSpeed) * newSpeed;
-                ball.dy = (ball.dy / currentSpeed) * newSpeed;
+                ball.color = ballColors[currentBallColorIndex];
             });
         }
 
-        function createPowerup() {
-            const size = Math.max(15, WIDTH * 0.03);
-            const types = ["expand", "shrink", "slow", "fast", "multi", "bomb"];
-            const type = Math.random() < config.BOMB_CHANCE ? "bomb" : types[Math.floor(Math.random() * 5)];
+        function showLevelUp(newLevel) {
+            const levelUp = document.getElementById('levelUp');
+            const levelNumber = document.getElementById('levelNumber');
+            
+            levelNumber.textContent = newLevel;
+            levelUp.style.display = 'block';
+            
+            setTimeout(() => {
+                levelUp.style.display = 'none';
+            }, 2000);
+        }
+
+        function createPowerup(bombChance) {
+            const powerupSize = Math.max(15, WIDTH * 0.03);
+            let type;
+            
+            // Шанс создания бомбы
+            if (Math.random() < bombChance) {
+                type = "bomb";
+            } else {
+                type = config.POWERUP_TYPES[Math.floor(Math.random() * (config.POWERUP_TYPES.length - 1))];
+            }
             
             if (type === "bomb") {
                 bombs.push({
-                    x: Math.random() * (WIDTH - size * 2) + size,
+                    x: Math.random() * (WIDTH - powerupSize * 2) + powerupSize,
                     y: 0,
                     type: type,
-                    speed: 3,
-                    size: size
+                    speed: 3 * (HEIGHT / 600), // Бомбы падают быстрее
+                    size: powerupSize,
+                    color: POWERUP_COLORS[type] || '#000000',
+                    pulsePhase: Math.random() * Math.PI * 2 // Фаза пульсации для анимации
                 });
             } else {
                 powerups.push({
-                    x: Math.random() * (WIDTH - size * 2) + size,
+                    x: Math.random() * (WIDTH - powerupSize * 2) + powerupSize,
                     y: 0,
                     type: type,
-                    speed: 2,
-                    size: size
+                    speed: 2 * (HEIGHT / 600),
+                    size: powerupSize,
+                    color: POWERUP_COLORS[type] || '#FFFFFF'
                 });
             }
         }
 
-        function createPortal() {
-            const size = Math.max(30, WIDTH * 0.05);
-            portals.push({
-                x: Math.random() > 0.5 ? size : WIDTH - size,
-                y: Math.random() * (HEIGHT * 0.6) + HEIGHT * 0.2,
-                size: size,
-                rotation: 0
-            });
-            
-            if (portals.length > 2) {
-                portals.splice(0, 1);
-            }
-        }
-
-        function updatePowerups() {
-            // Движение бонусов
+        function updatePowerupsMovement() {
             powerups.forEach((powerup, index) => {
                 powerup.y += powerup.speed;
-                if (powerup.y > HEIGHT) {
-                    powerups.splice(index, 1);
-                } else if (powerup.y + powerup.size >= platform.y && 
-                          powerup.x >= platform.x && 
-                          powerup.x <= platform.x + platform.width) {
+
+                if (powerup.y + powerup.size >= platform.y && 
+                    powerup.y <= platform.y + platform.height &&
+                    powerup.x >= platform.x && 
+                    powerup.x <= platform.x + platform.width) {
+                    
                     activatePowerup(powerup.type);
                     powerups.splice(index, 1);
                 }
-            });
 
-            // Движение бомб
+                if (powerup.y > HEIGHT) {
+                    powerups.splice(index, 1);
+                }
+            });
+        }
+
+        function updateBombsMovement() {
             bombs.forEach((bomb, index) => {
                 bomb.y += bomb.speed;
-                if (bomb.y > HEIGHT) {
-                    bombs.splice(index, 1);
-                } else if (bomb.y + bomb.size >= platform.y && 
-                          bomb.x >= platform.x && 
-                          bomb.x <= platform.x + platform.width) {
+
+                if (bomb.y + bomb.size >= platform.y && 
+                    bomb.y <= platform.y + platform.height &&
+                    bomb.x >= platform.x && 
+                    bomb.x <= platform.x + platform.width) {
+                    
+                    // Столкновение с бомбой - проигрыш
+                    playBombSound();
                     endGame();
                 }
-            });
-        }
 
-        function updatePortals() {
-            portals.forEach(portal => {
-                portal.rotation += 0.02;
-            });
-        }
-
-        function checkPortalCollision(ball) {
-            portals.forEach(portal => {
-                const dx = ball.x - portal.x;
-                const dy = ball.y - portal.y;
-                const distance = Math.sqrt(dx*dx + dy*dy);
-                
-                if (distance < portal.size / 2 + ball.radius) {
-                    // Простая телепортация
-                    ball.x = Math.random() * (WIDTH - ball.radius * 2) + ball.radius;
-                    ball.y = Math.random() * (HEIGHT * 0.4) + ball.radius;
-                    createTeleportParticles(ball.x, ball.y);
+                if (bomb.y > HEIGHT) {
+                    bombs.splice(index, 1);
                 }
             });
         }
 
-        function createCollisionParticles(x, y, color) {
-            if (particles.length >= config.MAX_PARTICLES) return;
-            
-            for (let i = 0; i < 5; i++) {
-                particles.push({
-                    x: x, y: y,
-                    vx: (Math.random() - 0.5) * 6,
-                    vy: (Math.random() - 0.5) * 6,
-                    life: 1,
-                    color: color,
-                    size: Math.random() * 2 + 1
-                });
-            }
-        }
-
-        function createDustParticles() {
-            if (particles.length >= config.MAX_PARTICLES) return;
-            
-            particles.push({
-                x: platform.x + Math.random() * platform.width,
-                y: platform.y + platform.height,
-                vx: (Math.random() - 0.5) * 2,
-                vy: Math.random() * 2 + 1,
-                life: 1,
-                color: '#CCCCCC',
-                size: Math.random() * 2 + 1
-            });
-        }
-
-        function createTeleportParticles(x, y) {
-            if (particles.length >= config.MAX_PARTICLES) return;
-            
-            for (let i = 0; i < 8; i++) {
-                particles.push({
-                    x: x, y: y,
-                    vx: (Math.random() - 0.5) * 4,
-                    vy: (Math.random() - 0.5) * 4,
-                    life: 1,
-                    color: '#9C27B0',
-                    size: Math.random() * 3 + 1
-                });
-            }
-        }
-
-        function updateParticles(deltaTime) {
-            particles.forEach((particle, index) => {
-                particle.x += particle.vx * (deltaTime / 16);
-                particle.y += particle.vy * (deltaTime / 16);
-                particle.life -= 0.03;
-                
-                if (particle.life <= 0) {
-                    particles.splice(index, 1);
+        function updateBombs() {
+            // Анимация пульсации бомб
+            bombs.forEach(bomb => {
+                // Обновляем фазу пульсации на основе времени
+                bomb.pulsePhase += 0.05;
+                if (bomb.pulsePhase > Math.PI * 2) {
+                    bomb.pulsePhase -= Math.PI * 2;
                 }
             });
         }
 
-        function updatePlatformPosition() {
-            const lift = Math.min(HEIGHT * 0.3, Math.floor(score / 50) * (HEIGHT * 0.03));
-            platform.y = originalPlatformY - lift;
+        function updatePowerups() {
+            const now = Date.now();
+            Object.keys(activePowerups).forEach(type => {
+                if (now > activePowerups[type].expires) {
+                    deactivatePowerup(type);
+                    delete activePowerups[type];
+                }
+            });
         }
 
         function activatePowerup(type) {
+            const now = Date.now();
+            const duration = config.POWERUP_DURATION;
+            
+            // Если баф уже активен, продлеваем время и увеличиваем счетчик
+            if (activePowerups[type]) {
+                activePowerups[type].expires = now + duration;
+                activePowerups[type].count = (activePowerups[type].count || 1) + 1;
+            } else {
+                // Создаем новый баф
+                activePowerups[type] = {
+                    expires: now + duration,
+                    count: 1
+                };
+                
+                // Применяем эффект только при первом активировании
+                applyPowerupEffect(type);
+            }
+            
+            // Устанавливаем таймер для снятия эффекта
+            setTimeout(() => {
+                if (activePowerups[type] && now + duration <= activePowerups[type].expires) {
+                    deactivatePowerup(type);
+                    delete activePowerups[type];
+                }
+            }, duration);
+        }
+
+        function applyPowerupEffect(type) {
+            const maxPlatformWidth = WIDTH * 0.4;
+            
             switch(type) {
                 case 'expand':
-                    platform.width = Math.min(WIDTH * 0.4, platform.width * 1.5);
+                    platform.width = Math.min(maxPlatformWidth, platform.width * 1.5);
                     break;
                 case 'shrink':
                     platform.width = Math.max(WIDTH * 0.1, platform.width * 0.7);
@@ -735,212 +913,224 @@
                     });
                     break;
                 case 'multi':
-                    if (balls.length < config.MAX_BALLS) {
-                        const newBall = {...balls[0]};
-                        newBall.dx = -newBall.dx;
-                        newBall.trail = [];
-                        balls.push(newBall);
+                    if (balls.length < 5) {
+                        // Создаем 2 дополнительных мяча вместо 1
+                        for (let i = 0; i < 2 && balls.length < 5; i++) {
+                            const newBall = {...balls[0]};
+                            newBall.dx = -newBall.dx * (0.8 + Math.random() * 0.4);
+                            newBall.color = ballColors[(currentBallColorIndex + 1) % ballColors.length];
+                            balls.push(newBall);
+                        }
                     }
                     break;
             }
         }
 
+        function deactivatePowerup(type) {
+            const basePlatformWidth = Math.min(150, WIDTH * 0.2);
+            
+            switch(type) {
+                case 'expand':
+                case 'shrink':
+                    platform.width = Math.min(WIDTH * 0.4, basePlatformWidth * (1 + 0.001 * score));
+                    break;
+                case 'slow':
+                case 'fast':
+                    // Возвращаем исходную скорость мячей
+                    const currentSpeed = getBallSpeed(currentLevel);
+                    balls.forEach(ball => {
+                        const speed = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
+                        ball.dx = (ball.dx / speed) * currentSpeed;
+                        ball.dy = (ball.dy / speed) * currentSpeed;
+                    });
+                    break;
+            }
+        }
+
+        function playHitSound() {
+            if (sounds.hit) {
+                sounds.hit.currentTime = 0;
+                sounds.hit.play().catch(e => console.log("Не удалось воспроизвести звук"));
+            }
+        }
+
+        function playBombSound() {
+            if (sounds.bomb) {
+                sounds.bomb.currentTime = 0;
+                sounds.bomb.play().catch(e => console.log("Не удалось воспроизвести звук взрыва"));
+            }
+        }
+
+        function playBackgroundMusic() {
+            if (sounds.music) {
+                sounds.music.play().catch(e => console.log("Не удалось воспроизвести музыку"));
+            }
+        }
+
         function render() {
-            // Очистка
             ctx.clearRect(0, 0, WIDTH, HEIGHT);
             
-            // Фон
             drawBackground();
-            
-            // Объекты
-            drawParticles();
-            drawPortals();
-            drawBalls();
             drawPlatform();
-            drawPowerups();
-            drawBombs();
+            balls.forEach(ball => drawBall(ball));
+            powerups.forEach(powerup => drawPowerup(powerup));
+            bombs.forEach(bomb => drawBomb(bomb));
         }
 
         function drawBackground() {
-            const theme = config.LEVEL_SETTINGS[currentLevel].theme || 'air';
-            const colors = THEME_COLORS[theme];
+            // Выбираем фон в зависимости от уровня
+            let background = images.background1;
             
-            const gradient = ctx.createLinearGradient(0, 0, WIDTH, HEIGHT);
-            gradient.addColorStop(0, colors[0]);
-            gradient.addColorStop(1, colors[1]);
+            if (currentLevel >= 14 && images.background14) {
+                background = images.background14;
+            } else if (currentLevel >= 10 && images.background10) {
+                background = images.background10;
+            } else if (currentLevel >= 6 && images.background6) {
+                background = images.background6;
+            } else if (currentLevel >= 3 && images.background3) {
+                background = images.background3;
+            }
             
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, WIDTH, HEIGHT);
-        }
-
-        function drawParticles() {
-            particles.forEach(particle => {
-                ctx.globalAlpha = particle.life;
-                ctx.fillStyle = particle.color;
-                ctx.beginPath();
-                ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
-                ctx.fill();
-            });
-            ctx.globalAlpha = 1;
-        }
-
-        function drawPortals() {
-            portals.forEach(portal => {
-                ctx.save();
-                ctx.translate(portal.x, portal.y);
-                ctx.rotate(portal.rotation);
-                
-                ctx.strokeStyle = '#9C27B0';
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                ctx.arc(0, 0, portal.size / 2, 0, Math.PI * 2);
-                ctx.stroke();
-                
-                ctx.fillStyle = 'rgba(156, 39, 176, 0.3)';
-                ctx.beginPath();
-                ctx.arc(0, 0, portal.size / 3, 0, Math.PI * 2);
-                ctx.fill();
-                
-                ctx.restore();
-            });
-        }
-
-        function drawBalls() {
-            balls.forEach(ball => {
-                // След
-                ball.trail.forEach((point, index) => {
-                    const alpha = index / ball.trail.length * 0.3;
-                    ctx.globalAlpha = alpha;
-                    ctx.fillStyle = ball.color;
-                    ctx.beginPath();
-                    ctx.arc(point.x, point.y, ball.radius * 0.5, 0, Math.PI * 2);
-                    ctx.fill();
-                });
-                ctx.globalAlpha = 1;
-                
-                // Мяч
-                ctx.fillStyle = ball.color;
-                ctx.beginPath();
-                ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-                ctx.fill();
-            });
+            if (background) {
+                ctx.drawImage(background, 0, 0, WIDTH, HEIGHT);
+            } else {
+                // Запасной фон
+                ctx.fillStyle = currentLevel >= 14 ? '#0c2461' : 
+                               currentLevel >= 10 ? '#b71540' : 
+                               currentLevel >= 6 ? '#3c6382' : 
+                               currentLevel >= 3 ? '#e55039' : '#1e3799';
+                ctx.fillRect(0, 0, WIDTH, HEIGHT);
+            }
         }
 
         function drawPlatform() {
             ctx.fillStyle = platform.color;
             ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+            
+            ctx.fillStyle = '#DB7093';
+            ctx.fillRect(platform.x, platform.y + platform.height - 3, platform.width, 3);
+            
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(platform.x, platform.y, platform.width, 2);
         }
 
-        function drawPowerups() {
-            powerups.forEach(powerup => {
-                ctx.fillStyle = POWERUP_COLORS[powerup.type];
-                ctx.fillRect(powerup.x, powerup.y, powerup.size, powerup.size);
+        function drawBall(ball) {
+            ctx.fillStyle = ball.color;
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#E0FFFF';
+            ctx.beginPath();
+            ctx.arc(ball.x - ball.radius/3, ball.y - ball.radius/3, ball.radius/2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawPowerup(powerup) {
+            ctx.fillStyle = powerup.color;
+            ctx.fillRect(powerup.x, powerup.y, powerup.size, powerup.size);
+            
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(powerup.x, powerup.y, powerup.size, powerup.size);
+            
+            ctx.fillStyle = '#FFFFFF';
+            const fontSize = Math.max(12, powerup.size * 0.6);
+            ctx.font = `bold ${fontSize}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            const symbol = POWERUP_SYMBOLS[powerup.type] || '?';
+            ctx.fillText(symbol, powerup.x + powerup.size/2, powerup.y + powerup.size/2);
+        }
+
+        function drawBomb(bomb) {
+            // Анимация пульсации - изменяем размер бомбы
+            const pulseScale = 1 + 0.1 * Math.sin(bomb.pulsePhase);
+            const currentSize = bomb.size * pulseScale;
+            const offset = (bomb.size - currentSize) / 2;
+            
+            // Рисуем бомбу с шипами
+            ctx.fillStyle = bomb.color;
+            ctx.beginPath();
+            ctx.arc(bomb.x + bomb.size/2, bomb.y + bomb.size/2, currentSize/2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Шипы (также пульсируют)
+            ctx.strokeStyle = '#FF0000';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < 8; i++) {
+                const angle = (i / 8) * Math.PI * 2;
+                const spikeLength = currentSize * 0.3;
+                const startX = bomb.x + bomb.size/2 + Math.cos(angle) * (currentSize/2);
+                const startY = bomb.y + bomb.size/2 + Math.sin(angle) * (currentSize/2);
+                const endX = bomb.x + bomb.size/2 + Math.cos(angle) * (currentSize/2 + spikeLength);
+                const endY = bomb.y + bomb.size/2 + Math.sin(angle) * (currentSize/2 + spikeLength);
                 
-                ctx.fillStyle = '#FFFFFF';
-                ctx.font = 'bold 16px Arial';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(POWERUP_SYMBOLS[powerup.type], powerup.x + powerup.size/2, powerup.y + powerup.size/2);
-            });
-        }
-
-        function drawBombs() {
-            bombs.forEach(bomb => {
-                ctx.fillStyle = '#F44336';
                 ctx.beginPath();
-                ctx.arc(bomb.x + bomb.size/2, bomb.y + bomb.size/2, bomb.size/2, 0, Math.PI * 2);
-                ctx.fill();
-                
-                ctx.fillStyle = '#FFFFFF';
-                ctx.font = 'bold 14px Arial';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText('!', bomb.x + bomb.size/2, bomb.y + bomb.size/2);
-            });
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(endX, endY);
+                ctx.stroke();
+            }
+            
+            // Символ бомбы
+            ctx.fillStyle = '#FFFFFF';
+            const fontSize = Math.max(12, currentSize * 0.4);
+            ctx.font = `bold ${fontSize}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('!', bomb.x + bomb.size/2, bomb.y + bomb.size/2);
+            
+            // Красное свечение
+            ctx.shadowColor = '#FF0000';
+            ctx.shadowBlur = 15;
+            ctx.beginPath();
+            ctx.arc(bomb.x + bomb.size/2, bomb.y + bomb.size/2, currentSize/2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
         }
 
         function updateUI() {
             document.getElementById('score').textContent = score;
         }
 
-        function showLevelUp(newLevel) {
-            const levelUp = document.getElementById('levelUp');
-            document.getElementById('levelNumber').textContent = newLevel;
-            levelUp.style.display = 'block';
-            setTimeout(() => levelUp.style.display = 'none', 1500);
-        }
-
-        function playHitSound() {
-            // Заглушка для звука
-        }
-
         function endGame() {
             gameOver = true;
-            cancelAnimationFrame(animationId);
-            
             document.getElementById('finalScore').textContent = score;
             document.getElementById('finalLevel').textContent = currentLevel;
             document.getElementById('gameOver').style.display = 'flex';
             
+            // Обновляем таблицу рекордов
             updateHighScoresDisplay();
+            
+            // Проверяем, побит ли рекорд
             checkNewHighScore();
-        }
-
-        function resumeGame() {
-            isPaused = false;
-            document.getElementById('pauseScreen').style.display = 'none';
-            gameLoop();
         }
 
         function restartGame() {
             document.getElementById('gameOver').style.display = 'none';
             document.getElementById('pauseScreen').style.display = 'none';
             document.getElementById('newHighScore').style.display = 'none';
+            isPaused = false;
             resetGame();
-            gameLoop();
-        }
-
-        // Система рекордов
-        function loadHighScores() {
-            const saved = localStorage.getItem('highScores');
-            highScores = saved ? JSON.parse(saved) : [
-                { name: "КИС", score: 100 }, { name: "МУР", score: 75 }, { name: "ПУХ", score: 50 }
-            ];
-        }
-
-        function saveHighScores() {
-            localStorage.setItem('highScores', JSON.stringify(highScores));
-        }
-
-        function updateHighScoresDisplay() {
-            const list = document.getElementById('highScoresList');
-            list.innerHTML = highScores.slice(0, 5).map(s => `${s.name}: ${s.score}`).join('<br>');
-        }
-
-        function checkNewHighScore() {
-            if (highScores.length < 5 || score > highScores[highScores.length - 1].score) {
-                document.getElementById('newHighScore').style.display = 'block';
+            if (gameStarted) {
+                requestAnimationFrame(gameLoop);
             }
-        }
-
-        function saveHighScore() {
-            const initials = document.getElementById('initialsInput').value.toUpperCase().substr(0, 3) || 'КИС';
-            highScores.push({ name: initials, score: score });
-            highScores.sort((a, b) => b.score - a.score);
-            highScores = highScores.slice(0, 5);
-            saveHighScores();
-            updateHighScoresDisplay();
-            document.getElementById('newHighScore').style.display = 'none';
         }
 
         function closeGame() {
             if (window.Telegram && Telegram.WebApp) {
                 Telegram.WebApp.close();
+            } else {
+                document.getElementById('gameOver').style.display = 'none';
+                document.getElementById('pauseScreen').style.display = 'none';
             }
         }
 
-        // Запуск
+        // Запуск игры при загрузке
         window.onload = init;
+
+        // Инициализация Telegram Web App
         if (window.Telegram && Telegram.WebApp) {
             Telegram.WebApp.ready();
             Telegram.WebApp.expand();
