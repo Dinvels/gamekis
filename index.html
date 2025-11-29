@@ -130,6 +130,7 @@
         let keys = {};
         let platformVelocity = 0;
         let resourcesLoaded = false;
+        let lastTime = 0;
 
         // Цвета для бонусов и бомб
         const POWERUP_COLORS = {
@@ -189,7 +190,7 @@
             // Загрузка ресурсов
             await loadResources();
             resourcesLoaded = true;
-            document.getElementById('loading').style.display = 'none';
+            document.getElementById('loading').textContent = "Ресурсы загружены!";
             document.getElementById('startBtn').disabled = false;
         }
 
@@ -209,25 +210,43 @@
 
         async function loadResources() {
             try {
-                // Загрузка изображений с fallback
-                await loadImage('generated_image_20251128184952.jpg').then(img => images.background1 = img).catch(createFallbackBackground);
-                await loadImage('1212.jpg').then(img => images.background3 = img).catch(createFallbackBackground);
-                await loadImage('4.jpg').then(img => images.background6 = img).catch(createFallbackBackground);
-                await loadImage('3.jpg').then(img => images.background10 = img).catch(createFallbackBackground);
-                await loadImage('2.jpg').then(img => images.background14 = img).catch(createFallbackBackground);
+                // Загрузка изображений
+                console.log("Начинаем загрузку изображений...");
+                
+                // Используем абсолютные пути или правильные относительные пути
+                const imagePromises = [
+                    loadImage('https://raw.githubusercontent.com/your-username/your-repo/main/generated_image_20251128184952.jpg').then(img => images.background1 = img),
+                    loadImage('https://raw.githubusercontent.com/your-username/your-repo/main/1212.jpg').then(img => images.background3 = img),
+                    loadImage('https://raw.githubusercontent.com/your-username/your-repo/main/4.jpg').then(img => images.background6 = img),
+                    loadImage('https://raw.githubusercontent.com/your-username/your-repo/main/3.jpg').then(img => images.background10 = img),
+                    loadImage('https://raw.githubusercontent.com/your-username/your-repo/main/2.jpg').then(img => images.background14 = img)
+                ];
+
+                // Ждем загрузки всех изображений или создаем fallback
+                await Promise.allSettled(imagePromises);
+                console.log("Изображения загружены:", images);
+                
+                // Проверяем, загрузились ли изображения, иначе создаем fallback
+                if (!images.background1) {
+                    console.log("Создаем fallback фоны...");
+                    createFallbackBackgrounds();
+                }
                 
                 // Загрузка звуков
-                sounds.hit = new Audio('DP2_Gang_Rim_Hit.wav');
-                sounds.music = new Audio('U.mp3');
-                sounds.bomb = new Audio('DP2_Gang_Rim_Hit.wav');
+                console.log("Загружаем звуки...");
+                sounds.hit = new Audio('https://raw.githubusercontent.com/your-username/your-repo/main/DP2_Gang_Rim_Hit.wav');
+                sounds.music = new Audio('https://raw.githubusercontent.com/your-username/your-repo/main/U.mp3');
+                sounds.bomb = new Audio('https://raw.githubusercontent.com/your-username/your-repo/main/DP2_Gang_Rim_Hit.wav');
                 
                 sounds.hit.volume = 0.7;
                 sounds.music.volume = 0.5;
                 sounds.music.loop = true;
                 sounds.bomb.volume = 0.8;
                 
+                console.log("Звуки загружены");
+                
             } catch (error) {
-                console.log("Некоторые ресурсы не загружены, игра продолжается без них");
+                console.log("Ошибка загрузки ресурсов:", error);
                 createFallbackBackgrounds();
             }
         }
@@ -235,13 +254,20 @@
         function loadImage(src) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
-                img.onload = () => resolve(img);
-                img.onerror = () => reject(new Error(`Не удалось загрузить: ${src}`));
+                img.onload = () => {
+                    console.log("Изображение загружено:", src);
+                    resolve(img);
+                };
+                img.onerror = () => {
+                    console.log("Ошибка загрузки изображения:", src);
+                    reject(new Error(`Не удалось загрузить: ${src}`));
+                };
                 img.src = src;
             });
         }
 
         function createFallbackBackgrounds() {
+            console.log("Создаем резервные фоны...");
             const createGradientBackground = (color1, color2) => {
                 const canvas = document.createElement('canvas');
                 canvas.width = 800;
@@ -264,15 +290,15 @@
             images.background14 = createGradientBackground('#0c2461', '#3c6382');
         }
 
-        function createFallbackBackground() {
-            // Простой fallback если не загрузилось конкретное изображение
-            return images.background1 || createFallbackBackgrounds().background1;
-        }
-
         function setupControls() {
-            // Плавное управление клавиатурой
+            // Плавное управление клавиатурой - ИСПРАВЛЕНО
             window.addEventListener('keydown', (e) => {
                 if (gameOver || isPaused || !resourcesLoaded) return;
+                
+                if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === ' ') {
+                    e.preventDefault(); // Предотвращаем прокрутку страницы
+                }
+                
                 keys[e.key] = true;
                 
                 if (e.key === ' ' || e.key === 'Escape') {
@@ -321,7 +347,7 @@
             
             // Запуск музыки
             if (sounds.music) {
-                sounds.music.play().catch(e => console.log("Не удалось воспроизвести музыку"));
+                sounds.music.play().catch(e => console.log("Не удалось воспроизвести музыку:", e));
             }
             
             requestAnimationFrame(gameLoop);
@@ -333,7 +359,7 @@
                 height: Math.max(15, HEIGHT * 0.02),
                 x: WIDTH/2 - 75,
                 y: HEIGHT * 0.85,
-                speed: WIDTH * 0.02,
+                speed: WIDTH * 0.015, // Увеличил скорость для лучшей отзывчивости
                 color: '#FFB6C1',
                 originalWidth: Math.min(150, WIDTH * 0.2),
                 originalY: HEIGHT * 0.85
@@ -361,35 +387,41 @@
             isPaused = false;
             platformVelocity = 0;
             keys = {};
+            lastTime = 0;
             
             updateUI();
         }
 
         function gameLoop(timestamp) {
+            if (!lastTime) lastTime = timestamp;
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+
             if (!gameOver && !isPaused) {
-                update();
+                update(deltaTime);
                 render();
                 requestAnimationFrame(gameLoop);
             }
         }
 
-        function update() {
-            updatePlatform();
-            updateBalls();
-            updatePowerups();
-            updateBombs();
-            updatePortals();
-            updateParticles();
+        function update(deltaTime) {
+            updatePlatform(deltaTime);
+            updateBalls(deltaTime);
+            updatePowerups(deltaTime);
+            updateBombs(deltaTime);
+            updatePortals(deltaTime);
+            updateParticles(deltaTime);
             checkBallCollisions();
             
             // Поднятие платформы каждые 50 очков
             updatePlatformPosition();
         }
 
-        function updatePlatform() {
-            const acceleration = 0.002;
-            const friction = 0.9;
+        function updatePlatform(deltaTime) {
+            const acceleration = 0.0005 * deltaTime; // Увеличил ускорение
+            const friction = 0.92; // Уменьшил трение для более плавного движения
             
+            // Обработка управления - ИСПРАВЛЕНО
             if (keys['ArrowLeft']) {
                 platformVelocity -= acceleration;
             }
@@ -401,14 +433,15 @@
             platformVelocity *= friction;
             
             // Ограничиваем максимальную скорость
-            platformVelocity = Math.max(-platform.speed, Math.min(platform.speed, platformVelocity));
+            const maxSpeed = platform.speed * 2;
+            platformVelocity = Math.max(-maxSpeed, Math.min(maxSpeed, platformVelocity));
             
             // Обновляем позицию
-            platform.x += platformVelocity;
+            platform.x += platformVelocity * (deltaTime / 16);
             platform.x = Math.max(0, Math.min(WIDTH - platform.width, platform.x));
             
             // Создаем частицы пыли при движении
-            if (Math.abs(platformVelocity) > 0.1) {
+            if (Math.abs(platformVelocity) > 0.5) {
                 createDustParticles();
             }
         }
@@ -423,7 +456,7 @@
             platform.y = platform.originalY - finalLift;
         }
 
-        function updateBalls() {
+        function updateBalls(deltaTime) {
             balls.forEach((ball, index) => {
                 // Обновляем след
                 ball.trail.push({x: ball.x, y: ball.y});
@@ -432,11 +465,11 @@
                 }
                 
                 // Применяем специальное поведение
-                applyBallBehavior(ball);
+                applyBallBehavior(ball, deltaTime);
                 
                 // Обновляем позицию
-                ball.x += ball.dx;
-                ball.y += ball.dy;
+                ball.x += ball.dx * (deltaTime / 16);
+                ball.y += ball.dy * (deltaTime / 16);
 
                 // Отскок от стен
                 if (ball.x - ball.radius <= 0 || ball.x + ball.radius >= WIDTH) {
@@ -477,13 +510,13 @@
             }
         }
 
-        function applyBallBehavior(ball) {
+        function applyBallBehavior(ball, deltaTime) {
             switch(ball.type) {
                 case 'sticky':
                     // Липкий мяч слегка притягивается к платформе
                     if (ball.y > HEIGHT / 2) {
                         const dx = platform.x + platform.width/2 - ball.x;
-                        ball.dx += dx * 0.0001;
+                        ball.dx += dx * 0.0001 * (deltaTime / 16);
                     }
                     break;
                 case 'magnetic':
@@ -495,7 +528,7 @@
                             const distance = Math.sqrt(dx*dx + dy*dy);
                             
                             if (distance < 100 && distance > 0) {
-                                const force = 0.3 / (distance * distance);
+                                const force = 0.3 / (distance * distance) * (deltaTime / 16);
                                 otherBall.dx += (dx / distance) * force;
                                 otherBall.dy += (dy / distance) * force;
                             }
@@ -702,10 +735,10 @@
             }
         }
 
-        function updatePowerups() {
+        function updatePowerups(deltaTime) {
             // Движение бонусов
             powerups.forEach((powerup, index) => {
-                powerup.y += powerup.speed;
+                powerup.y += powerup.speed * (deltaTime / 16);
 
                 // Столкновение с платформой
                 if (powerup.y + powerup.size >= platform.y && 
@@ -725,7 +758,7 @@
 
             // Движение бомб
             bombs.forEach((bomb, index) => {
-                bomb.y += bomb.speed;
+                bomb.y += bomb.speed * (deltaTime / 16);
 
                 // Столкновение с платформой
                 if (bomb.y + bomb.size >= platform.y && 
@@ -759,16 +792,16 @@
             });
         }
 
-        function updateBombs() {
+        function updateBombs(deltaTime) {
             // Анимация пульсации бомб
             bombs.forEach(bomb => {
-                bomb.pulsePhase += 0.05;
+                bomb.pulsePhase += 0.05 * (deltaTime / 16);
             });
         }
 
-        function updatePortals() {
+        function updatePortals(deltaTime) {
             portals.forEach(portal => {
-                portal.rotation += 0.02;
+                portal.rotation += 0.02 * (deltaTime / 16);
             });
             
             // Удаляем старые порталы
@@ -841,11 +874,11 @@
             }
         }
 
-        function updateParticles() {
+        function updateParticles(deltaTime) {
             particles.forEach((particle, index) => {
-                particle.x += particle.vx;
-                particle.y += particle.vy;
-                particle.life -= 0.02;
+                particle.x += particle.vx * (deltaTime / 16);
+                particle.y += particle.vy * (deltaTime / 16);
+                particle.life -= 0.02 * (deltaTime / 16);
                 
                 if (particle.life <= 0) {
                     particles.splice(index, 1);
@@ -910,17 +943,39 @@
         }
 
         function render() {
-            // Фон с тематическими цветами
+            // Фон с тематическими цветами или изображениями
             const theme = config.LEVELS[currentLevel].theme;
-            const colors = THEME_COLORS[theme] || THEME_COLORS.air;
             
-            const gradient = ctx.createLinearGradient(0, 0, WIDTH, HEIGHT);
-            gradient.addColorStop(0, colors[0]);
-            gradient.addColorStop(0.5, colors[1]);
-            gradient.addColorStop(1, colors[2]);
+            // Пробуем использовать изображения, если они загружены
+            let backgroundUsed = false;
             
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, WIDTH, HEIGHT);
+            if (currentLevel >= 14 && images.background14) {
+                ctx.drawImage(images.background14, 0, 0, WIDTH, HEIGHT);
+                backgroundUsed = true;
+            } else if (currentLevel >= 10 && images.background10) {
+                ctx.drawImage(images.background10, 0, 0, WIDTH, HEIGHT);
+                backgroundUsed = true;
+            } else if (currentLevel >= 6 && images.background6) {
+                ctx.drawImage(images.background6, 0, 0, WIDTH, HEIGHT);
+                backgroundUsed = true;
+            } else if (currentLevel >= 3 && images.background3) {
+                ctx.drawImage(images.background3, 0, 0, WIDTH, HEIGHT);
+                backgroundUsed = true;
+            } else if (images.background1) {
+                ctx.drawImage(images.background1, 0, 0, WIDTH, HEIGHT);
+                backgroundUsed = true;
+            }
+            
+            // Если изображения не загружены, используем градиент
+            if (!backgroundUsed) {
+                const colors = THEME_COLORS[theme] || THEME_COLORS.air;
+                const gradient = ctx.createLinearGradient(0, 0, WIDTH, HEIGHT);
+                gradient.addColorStop(0, colors[0]);
+                gradient.addColorStop(0.5, colors[1]);
+                gradient.addColorStop(1, colors[2]);
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, WIDTH, HEIGHT);
+            }
 
             // Частицы
             particles.forEach(particle => {
@@ -1030,7 +1085,7 @@
         function playHitSound() {
             if (sounds.hit) {
                 sounds.hit.currentTime = 0;
-                sounds.hit.play().catch(e => console.log("Не удалось воспроизвести звук"));
+                sounds.hit.play().catch(e => console.log("Не удалось воспроизвести звук удара"));
             }
         }
 
@@ -1062,6 +1117,7 @@
             if (sounds.music) {
                 sounds.music.play().catch(e => console.log("Не удалось возобновить музыку"));
             }
+            lastTime = 0; // Сбрасываем время для плавного продолжения
             requestAnimationFrame(gameLoop);
         }
 
@@ -1072,6 +1128,7 @@
             if (sounds.music) {
                 sounds.music.play().catch(e => console.log("Не удалось воспроизвести музыку"));
             }
+            lastTime = 0; // Сбрасываем время
             requestAnimationFrame(gameLoop);
         }
 
